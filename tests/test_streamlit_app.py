@@ -306,6 +306,22 @@ class TestTranslate:
         assert result == "hola mundo"
 
 
+class TestHeader:
+    def test_page_title(self, app_module):
+        app_module.st.set_page_config.assert_called_once()
+        kwargs = app_module.st.set_page_config.call_args.kwargs
+        assert kwargs["page_title"] == "TranslateGemma Pipeline"
+
+    def test_title(self, app_module):
+        app_module.st.title.assert_called_once_with("TranslateGemma Pipeline")
+
+    def test_caption_links_the_model(self, app_module):
+        app_module.st.caption.assert_called_once()
+        caption = app_module.st.caption.call_args.args[0]
+        assert "[Google TranslateGemma 4B model]" in caption
+        assert "https://huggingface.co/google/translategemma-4b-it" in caption
+
+
 class TestButtonLayout:
     def test_columns_called_twice(self, app_module):
         calls = app_module.st.columns.call_args_list

@@ -49,6 +49,13 @@ class TestBuildPrompt:
         prompt = app_module.build_prompt("Hello", "English", "en", "Spanish", "es")
         assert isinstance(prompt, str)
 
+    def test_newline_before_produce(self, app_module):
+        # The trained chat template puts a newline (not a space) after
+        # "cultural sensitivities." — keep build_prompt() aligned with it.
+        prompt = app_module.build_prompt("Hello", "English", "en", "Spanish", "es")
+        assert "cultural sensitivities.\nProduce only the" in prompt
+        assert "cultural sensitivities. Produce" not in prompt
+
 
 class TestSwapLanguages:
     def test_swaps_source_and_target(self, app_module):

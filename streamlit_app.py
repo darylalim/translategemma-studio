@@ -30,7 +30,7 @@ def build_prompt(
         f"You are a professional {src_lang} ({src_code}) to {tgt_lang} "
         f"({tgt_code}) translator. Your goal is to accurately convey the meaning and "
         f"nuances of the original {src_lang} text while adhering to {tgt_lang} grammar, "
-        f"vocabulary, and cultural sensitivities. Produce only the {tgt_lang} "
+        f"vocabulary, and cultural sensitivities.\nProduce only the {tgt_lang} "
         f"translation, without any additional explanations or commentary. Please translate "
         f"the following {src_lang} text into {tgt_lang}:\n\n\n{text}"
     )

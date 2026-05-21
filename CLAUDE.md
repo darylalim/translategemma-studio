@@ -59,7 +59,14 @@ Directionality rules: bidirectional languages pair only with English (not with e
 
 ### Do NOT use `tokenizer.apply_chat_template` for text translation
 
-Fails at runtime for TranslateGemma text translation. Manually construct the prompt string.
+TranslateGemma ships a large custom chat template that requires `content` to be a list of exactly one structured mapping (`type`, `source_lang_code`, `target_lang_code`, `text`) — not a plain string. The standard mlx-lm / model-card boilerplate (`content="hello"`) trips the template's `content | length != 1` guard and raises at runtime:
+
+```
+jinja2.exceptions.TemplateError: User role must provide `content` as an
+iterable with exactly one item.
+```
+
+Given the structured format the template works (it builds the prompt in "Prompt Template" below), but this app constructs that string manually instead — keeping the prompt explicit and independent of the MLX quant's bundled template.
 
 ```python
 prompt = f"<start_of_turn>user\n{instruction}<end_of_turn>\n<start_of_turn>model\n"
@@ -79,7 +86,7 @@ The app uses `zh-CN` as the language code for Chinese, matching the TranslateGem
 You are a professional {source_lang} ({src_lang_code}) to {target_lang}
 ({tgt_lang_code}) translator. Your goal is to accurately convey the meaning and
 nuances of the original {source_lang} text while adhering to {target_lang} grammar,
-vocabulary, and cultural sensitivities. Produce only the {target_lang}
+vocabulary, and cultural sensitivities.\nProduce only the {target_lang}
 translation, without any additional explanations or commentary. Please translate
 the following {source_lang} text into {target_lang}:\n\n\n{text}
 ```

@@ -15,6 +15,7 @@ logging.basicConfig(level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
+APP_TITLE = "TranslateGemma Pipeline"
 MODEL_ID = "mlx-community/translategemma-4b-it-8bit"
 MAX_NEW_TOKENS = 512
 
@@ -59,8 +60,12 @@ def translate(
     return result.split("<end_of_turn>", 1)[0].strip()
 
 
-st.set_page_config(page_title="TranslateGemma Translate", page_icon="\U0001f310")
-st.title("TranslateGemma Translate")
+st.set_page_config(page_title=APP_TITLE, page_icon="\U0001f310")
+st.title(APP_TITLE)
+st.caption(
+    "Translate text with the [Google TranslateGemma 4B model]"
+    "(https://huggingface.co/google/translategemma-4b-it)."
+)
 
 # --- Session state defaults ---
 st.session_state.setdefault("source_lang", "English")

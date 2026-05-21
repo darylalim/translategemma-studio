@@ -1,6 +1,6 @@
-# TranslateGemma Translate
+# TranslateGemma Pipeline
 
-Streamlit app for translating text using [TranslateGemma 4B 8-bit](https://huggingface.co/mlx-community/translategemma-4b-it-8bit) with Apple Silicon inference via MLX.
+Translate text with the [Google TranslateGemma 4B model](https://huggingface.co/google/translategemma-4b-it) on Apple Silicon with MLX.
 
 ## Features
 

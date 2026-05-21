@@ -1,6 +1,6 @@
-# TranslateGemma Translate
+# TranslateGemma Pipeline
 
-Streamlit app for translating text using [TranslateGemma 4B 8-bit](https://huggingface.co/mlx-community/translategemma-4b-it-8bit) with Apple Silicon inference via MLX.
+Translate text with the [Google TranslateGemma 4B model](https://huggingface.co/google/translategemma-4b-it) on Apple Silicon with MLX.
 
 ## Commands
 
@@ -38,7 +38,7 @@ Directionality rules: bidirectional languages pair only with English (not with e
 
 ### Model Loading
 
-`load_model()` returns `(model, tokenizer)`. Cached with `@st.cache_resource`. Uses `mlx_lm.load()`. Registers `<end_of_turn>` as an EOS token via `tokenizer.add_eos_token()` so generation stops early instead of running to `MAX_NEW_TOKENS`.
+`load_model()` returns `(model, tokenizer)`. Cached with `@st.cache_resource`. Loads `mlx-community/translategemma-4b-it-8bit` via `mlx_lm.load()`. Registers `<end_of_turn>` as an EOS token via `tokenizer.add_eos_token()` so generation stops early instead of running to `MAX_NEW_TOKENS`.
 
 ### Translation
 
@@ -46,6 +46,7 @@ Directionality rules: bidirectional languages pair only with English (not with e
 
 ### UI
 
+- Caption under the title: `st.caption` with a markdown link to the Google TranslateGemma model card
 - Language selectors: 3-column `[10, 1, 10]` layout with swap button (`:material/swap_horiz:`) in the middle, labels hidden via `label_visibility="collapsed"`
 - Swap button moves translation output to source input and clears the result; disabled when target is a from-English-only language (the only case where swap is invalid, since non-English sources always target English which is always swappable)
 - 2-column side-by-side; `st.text_area` (no placeholder, `max_chars=5000`, height 300) for input, disabled `st.text_area` (placeholder "Translation", height 300) for output

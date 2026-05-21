@@ -15,8 +15,3 @@ __pycache__/
 
 # OS
 .DS_Store
-
-# Project
-.worktrees/
-.superpowers/
-docs/superpowers/

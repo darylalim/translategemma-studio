@@ -386,6 +386,17 @@ class TestButtonLayout:
         assert calls[1] == call(2)
 
 
+class TestTokenCounter:
+    def test_token_count_caption_rendered(self, app_module):
+        captions = [c.args[0] for c in app_module.st.caption.call_args_list if c.args]
+        token_budget = f"/ {app_module.MAX_PROMPT_TOKENS} tokens"
+        assert any(token_budget in text for text in captions)
+
+    def test_right_column_has_alignment_spacer(self, app_module):
+        captions = [c.args[0] for c in app_module.st.caption.call_args_list if c.args]
+        assert "&nbsp;" in captions
+
+
 class TestLoadModel:
     def test_returns_model_and_tokenizer_from_load(self, app_module):
         mock_model = MagicMock()

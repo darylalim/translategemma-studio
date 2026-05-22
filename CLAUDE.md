@@ -46,14 +46,14 @@ Directionality rules: bidirectional languages pair only with English (not with e
 
 ### Context window
 
-The model has a 2048-token context (`CONTEXT_WINDOW`) shared by the prompt and the generated output. `count_prompt_tokens(prompt, tokenizer)` counts the tokens in a built prompt — instruction wrapper included — via `tokenizer.encode()`. `translate()` raises `ValueError` when the prompt exceeds `MAX_PROMPT_TOKENS` (1024), then sizes generation dynamically as `max_tokens = CONTEXT_WINDOW - prompt_tokens` so the translation gets all remaining room (the `<end_of_turn>` EOS still stops it early). The UI shows a live token count under the input and disables the translate button when the prompt is over budget.
+The model has a 2048-token context (`CONTEXT_WINDOW`) shared by the prompt and the generated output. `count_prompt_tokens(prompt, tokenizer)` counts the tokens in a built prompt — instruction wrapper included — via `tokenizer.encode()`. `translate()` raises `ValueError` when the prompt exceeds `MAX_PROMPT_TOKENS` (1024), then sizes generation dynamically as `max_tokens = CONTEXT_WINDOW - prompt_tokens` so the translation gets all remaining room (the `<end_of_turn>` EOS still stops it early). The UI shows a live token count under the input and disables the translate button when the prompt is over budget. `MAX_INPUT_CHARS` (5000) caps the text area as a coarse backstop — it keeps the live token count cheap and bounds pathological pastes, but the token counter is the real, language-aware limit.
 
 ### UI
 
 - Caption under the title: `st.caption` with a markdown link to the Google TranslateGemma model card
 - Language selectors: 3-column `[10, 1, 10]` layout with swap button (`:material/swap_horiz:`) in the middle, labels hidden via `label_visibility="collapsed"`
 - Swap button moves translation output to source input and clears the result; disabled when target is a from-English-only language (the only case where swap is invalid, since non-English sources always target English which is always swappable)
-- 2-column side-by-side; `st.text_area` (no placeholder, `max_chars=5000`, height 300) for input, disabled `st.text_area` (placeholder "Translation", height 300) for output
+- 2-column side-by-side; `st.text_area` (no placeholder, `max_chars=MAX_INPUT_CHARS`, height 300) for input, disabled `st.text_area` (placeholder "Translation", height 300) for output
 - Output text areas use `st.session_state` to set value (not the `value` parameter) to avoid stale widget state
 - Left panel (inside `left_col`): live token counter (`st.caption`, shown only when the input is non-empty, rendered red when the prompt exceeds `MAX_PROMPT_TOKENS`) and the translate button (primary, `use_container_width=True`, `disabled` when over budget)
 - Right panel (inside `right_col`): download button (secondary, `use_container_width=True`), `disabled` when no translation

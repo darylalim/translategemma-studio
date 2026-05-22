@@ -19,6 +19,7 @@ APP_TITLE = "TranslateGemma Pipeline"
 MODEL_ID = "mlx-community/translategemma-4b-it-8bit"
 CONTEXT_WINDOW = 2048  # model's total context (prompt + output), per the model card
 MAX_PROMPT_TOKENS = 1024  # prompt cap; leaves >=1024 tokens for the translation
+MAX_INPUT_CHARS = 5000  # coarse backstop; the token counter is the real gate
 
 
 def build_prompt(
@@ -149,7 +150,7 @@ with left_col:
     text = st.text_area(
         "Source text",
         height=300,
-        max_chars=5000,
+        max_chars=MAX_INPUT_CHARS,
         key="source_text",
         label_visibility="collapsed",
     )

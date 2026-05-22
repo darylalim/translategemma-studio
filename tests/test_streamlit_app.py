@@ -13,6 +13,9 @@ class TestConstants:
     def test_max_prompt_tokens(self, app_module):
         assert app_module.MAX_PROMPT_TOKENS == 1024
 
+    def test_max_input_chars(self, app_module):
+        assert app_module.MAX_INPUT_CHARS == 5000
+
     def test_prompt_budget_leaves_room_for_output(self, app_module):
         # The prompt cap must leave room within the context window
         # for the model to generate a translation.

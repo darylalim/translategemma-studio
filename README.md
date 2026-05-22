@@ -4,7 +4,8 @@ Translate text with the [Google TranslateGemma 4B model](https://huggingface.co/
 
 ## Features
 
-- **Text translation** — translate text between supported languages (up to 5,000 characters)
+- **Text translation** — translate text between supported languages
+- **Token counter** — live input usage against the model's context window, with translation blocked when the input is over budget
 - **Swap languages** — swap source and target languages, moving translation output to source input
 - **Download as text** — download translation output as a `.txt` file
 
@@ -14,6 +15,8 @@ Translate text with the [Google TranslateGemma 4B model](https://huggingface.co/
 
 - **225 bidirectional** — paired with English in both directions (e.g., French, Japanese, Swahili)
 - **70 from-English-only** — can only receive translations from English (e.g., Albanian, Finnish, Tamil)
+
+Quality varies by language — 55 of the 295 have published WMT24++ benchmark scores in the technical report, while the rest are trained but not formally evaluated.
 
 ## Requirements
 

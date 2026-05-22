@@ -43,6 +43,11 @@ def app_module():
     mock_st.button.return_value = False
 
     mock_mlx_lm = MagicMock()
+    # load() returns a (model, tokenizer) pair; the tokenizer's encode()
+    # must yield a real sequence so count_prompt_tokens() can len() it.
+    module_tokenizer = MagicMock()
+    module_tokenizer.encode.return_value = list(range(50))
+    mock_mlx_lm.load.return_value = (MagicMock(), module_tokenizer)
 
     patches = {
         "streamlit": mock_st,
@@ -68,10 +73,17 @@ def app_module():
 
 
 @pytest.fixture()
-def patched_translate(app_module):
+def mock_tokenizer():
+    """A mock tokenizer whose encode() returns a short, countable token list."""
+    tokenizer = MagicMock()
+    tokenizer.encode.return_value = list(range(50))
+    return tokenizer
+
+
+@pytest.fixture()
+def patched_translate(app_module, mock_tokenizer):
     """Patch load_model and generate for translation tests."""
     mock_model = MagicMock()
-    mock_tokenizer = MagicMock()
     with (
         patch.object(
             app_module,

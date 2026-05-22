@@ -1,12 +1,22 @@
 from unittest.mock import MagicMock, call, patch
 
+import pytest
+
 
 class TestConstants:
     def test_model_id(self, app_module):
         assert app_module.MODEL_ID == "mlx-community/translategemma-4b-it-8bit"
 
-    def test_max_new_tokens(self, app_module):
-        assert app_module.MAX_NEW_TOKENS == 512
+    def test_context_window(self, app_module):
+        assert app_module.CONTEXT_WINDOW == 2048
+
+    def test_max_prompt_tokens(self, app_module):
+        assert app_module.MAX_PROMPT_TOKENS == 1024
+
+    def test_prompt_budget_leaves_room_for_output(self, app_module):
+        # The prompt cap must leave room within the context window
+        # for the model to generate a translation.
+        assert app_module.MAX_PROMPT_TOKENS < app_module.CONTEXT_WINDOW
 
 
 class TestLanguageImports:
@@ -176,6 +186,16 @@ class TestSwapDisabled:
         assert mock_state["target_lang"] == "English"
 
 
+class TestCountPromptTokens:
+    def test_counts_encoded_tokens(self, app_module, mock_tokenizer):
+        count = app_module.count_prompt_tokens("a prompt", mock_tokenizer)
+        assert count == len(mock_tokenizer.encode.return_value)
+
+    def test_encodes_the_given_prompt(self, app_module, mock_tokenizer):
+        app_module.count_prompt_tokens("a prompt", mock_tokenizer)
+        mock_tokenizer.encode.assert_called_once_with("a prompt")
+
+
 class TestTranslate:
     def test_returns_string(self, patched_translate):
         result = patched_translate["translate"](
@@ -194,20 +214,20 @@ class TestTranslate:
         expected_prompt = app_module.build_prompt(
             "Hello", "English", "en", "Spanish", "es"
         )
+        prompt_tokens = len(patched_translate["tokenizer"].encode.return_value)
         app_module.generate.assert_called_once_with(
             patched_translate["model"],
             patched_translate["tokenizer"],
             prompt=expected_prompt,
-            max_tokens=512,
+            max_tokens=app_module.CONTEXT_WINDOW - prompt_tokens,
         )
 
     def test_generate_called_exactly_once(self, app_module, patched_translate):
         patched_translate["translate"]("Hello", "English", "en", "Spanish", "es")
         assert app_module.generate.call_count == 1
 
-    def test_strips_end_of_turn_token(self, app_module):
+    def test_strips_end_of_turn_token(self, app_module, mock_tokenizer):
         mock_model = MagicMock()
-        mock_tokenizer = MagicMock()
         with (
             patch.object(
                 app_module,
@@ -225,9 +245,8 @@ class TestTranslate:
             )
         assert result == "hola mundo"
 
-    def test_strips_repeated_end_of_turn_tokens(self, app_module):
+    def test_strips_repeated_end_of_turn_tokens(self, app_module, mock_tokenizer):
         mock_model = MagicMock()
-        mock_tokenizer = MagicMock()
         with (
             patch.object(
                 app_module,
@@ -245,9 +264,8 @@ class TestTranslate:
             )
         assert result == "hola mundo"
 
-    def test_clean_output_unchanged(self, app_module):
+    def test_clean_output_unchanged(self, app_module, mock_tokenizer):
         mock_model = MagicMock()
-        mock_tokenizer = MagicMock()
         with (
             patch.object(
                 app_module,
@@ -265,9 +283,8 @@ class TestTranslate:
             )
         assert result == "hola mundo"
 
-    def test_strips_whitespace_around_translation(self, app_module):
+    def test_strips_whitespace_around_translation(self, app_module, mock_tokenizer):
         mock_model = MagicMock()
-        mock_tokenizer = MagicMock()
         with (
             patch.object(
                 app_module,
@@ -285,9 +302,8 @@ class TestTranslate:
             )
         assert result == "hola mundo"
 
-    def test_strips_content_after_end_of_turn(self, app_module):
+    def test_strips_content_after_end_of_turn(self, app_module, mock_tokenizer):
         mock_model = MagicMock()
-        mock_tokenizer = MagicMock()
         with (
             patch.object(
                 app_module,
@@ -305,6 +321,35 @@ class TestTranslate:
             )
         assert result == "hola mundo"
 
+    def test_raises_when_prompt_exceeds_budget(self, app_module, mock_tokenizer):
+        mock_tokenizer.encode.return_value = list(
+            range(app_module.MAX_PROMPT_TOKENS + 1)
+        )
+        with (
+            patch.object(
+                app_module,
+                "load_model",
+                return_value=(MagicMock(), mock_tokenizer),
+            ),
+            patch.object(app_module, "generate") as mock_generate,
+        ):
+            with pytest.raises(ValueError, match="too long"):
+                app_module.translate("text", "English", "en", "Spanish", "es")
+        mock_generate.assert_not_called()
+
+    def test_allows_prompt_at_budget_limit(self, app_module, mock_tokenizer):
+        mock_tokenizer.encode.return_value = list(range(app_module.MAX_PROMPT_TOKENS))
+        with (
+            patch.object(
+                app_module,
+                "load_model",
+                return_value=(MagicMock(), mock_tokenizer),
+            ),
+            patch.object(app_module, "generate", return_value="ok"),
+        ):
+            result = app_module.translate("text", "English", "en", "Spanish", "es")
+        assert result == "ok"
+
 
 class TestHeader:
     def test_page_title(self, app_module):
@@ -316,10 +361,12 @@ class TestHeader:
         app_module.st.title.assert_called_once_with("TranslateGemma Pipeline")
 
     def test_caption_links_the_model(self, app_module):
-        app_module.st.caption.assert_called_once()
-        caption = app_module.st.caption.call_args.args[0]
-        assert "[Google TranslateGemma 4B model]" in caption
-        assert "https://huggingface.co/google/translategemma-4b-it" in caption
+        captions = [c.args[0] for c in app_module.st.caption.call_args_list if c.args]
+        assert any(
+            "[Google TranslateGemma 4B model]" in text
+            and "https://huggingface.co/google/translategemma-4b-it" in text
+            for text in captions
+        )
 
 
 class TestButtonLayout:

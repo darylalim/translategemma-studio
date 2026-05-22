@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 APP_TITLE = "TranslateGemma Pipeline"
 MODEL_ID = "mlx-community/translategemma-4b-it-8bit"
-MAX_NEW_TOKENS = 512
+CONTEXT_WINDOW = 2048  # model's total context (prompt + output), per the model card
+MAX_PROMPT_TOKENS = 1024  # prompt cap; leaves >=1024 tokens for the translation
 
 
 def build_prompt(
@@ -45,6 +46,10 @@ def load_model() -> tuple[Any, Any]:
     return model, tokenizer
 
 
+def count_prompt_tokens(prompt: str, tokenizer: Any) -> int:
+    return len(tokenizer.encode(prompt))
+
+
 def translate(
     text: str,
     src_lang: str,
@@ -54,7 +59,15 @@ def translate(
 ) -> str:
     prompt = build_prompt(text, src_lang, src_code, tgt_lang, tgt_code)
     model, tokenizer = load_model()
-    result = generate(model, tokenizer, prompt=prompt, max_tokens=MAX_NEW_TOKENS)
+    prompt_tokens = count_prompt_tokens(prompt, tokenizer)
+    if prompt_tokens > MAX_PROMPT_TOKENS:
+        raise ValueError(
+            f"Input is too long: {prompt_tokens} prompt tokens "
+            f"(limit {MAX_PROMPT_TOKENS})."
+        )
+    # Hand the translation every token left in the context window.
+    max_tokens = CONTEXT_WINDOW - prompt_tokens
+    result = generate(model, tokenizer, prompt=prompt, max_tokens=max_tokens)
     # Safety net: strip <end_of_turn> and any trailing content in case
     # the token leaks into the decoded output string.
     return result.split("<end_of_turn>", 1)[0].strip()
@@ -139,11 +152,30 @@ with left_col:
         label_visibility="collapsed",
     )
 
+    # Live token usage against the model's context window.
+    over_budget = False
+    if text.strip():
+        _, tokenizer = load_model()
+        preview = build_prompt(
+            text,
+            source,
+            ALL_LANGUAGES[source],
+            target,
+            ALL_LANGUAGES[target],
+        )
+        prompt_tokens = count_prompt_tokens(preview, tokenizer)
+        over_budget = prompt_tokens > MAX_PROMPT_TOKENS
+        usage = f"{prompt_tokens} / {MAX_PROMPT_TOKENS} tokens"
+        if over_budget:
+            usage = f":red[{usage} — too long to translate]"
+        st.caption(usage)
+
     translate_clicked = st.button(
         "Translate",
         type="primary",
         key="translate_text",
         use_container_width=True,
+        disabled=over_budget,
     )
 
 prev_response = st.session_state.get("translation_result", "")

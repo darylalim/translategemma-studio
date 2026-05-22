@@ -38,11 +38,15 @@ Directionality rules: bidirectional languages pair only with English (not with e
 
 ### Model Loading
 
-`load_model()` returns `(model, tokenizer)`. Cached with `@st.cache_resource`. Loads `mlx-community/translategemma-4b-it-8bit` via `mlx_lm.load()`. Registers `<end_of_turn>` as an EOS token via `tokenizer.add_eos_token()` so generation stops early instead of running to `MAX_NEW_TOKENS`.
+`load_model()` returns `(model, tokenizer)`. Cached with `@st.cache_resource`. Loads `mlx-community/translategemma-4b-it-8bit` via `mlx_lm.load()`. Registers `<end_of_turn>` as an EOS token via `tokenizer.add_eos_token()` so generation stops early instead of running to the `max_tokens` cap.
 
 ### Translation
 
-`translate(text, src_lang, src_code, tgt_lang, tgt_code)` builds the prompt, loads the model, and runs `mlx_lm.generate()`. Generation stops at `<end_of_turn>` via the registered EOS token. A safety-net split on `<end_of_turn>` strips the token if it leaks into the output string. Returns a `str` — the translated text. `MAX_NEW_TOKENS` (512) limits the maximum output length.
+`translate(text, src_lang, src_code, tgt_lang, tgt_code)` builds the prompt, loads the model, and runs `mlx_lm.generate()`. Generation stops at `<end_of_turn>` via the registered EOS token. A safety-net split on `<end_of_turn>` strips the token if it leaks into the output string. Returns a `str` — the translated text.
+
+### Context window
+
+The model has a 2048-token context (`CONTEXT_WINDOW`) shared by the prompt and the generated output. `count_prompt_tokens(prompt, tokenizer)` counts the tokens in a built prompt — instruction wrapper included — via `tokenizer.encode()`. `translate()` raises `ValueError` when the prompt exceeds `MAX_PROMPT_TOKENS` (1024), then sizes generation dynamically as `max_tokens = CONTEXT_WINDOW - prompt_tokens` so the translation gets all remaining room (the `<end_of_turn>` EOS still stops it early). The UI shows a live token count under the input and disables the translate button when the prompt is over budget.
 
 ### UI
 
@@ -51,7 +55,7 @@ Directionality rules: bidirectional languages pair only with English (not with e
 - Swap button moves translation output to source input and clears the result; disabled when target is a from-English-only language (the only case where swap is invalid, since non-English sources always target English which is always swappable)
 - 2-column side-by-side; `st.text_area` (no placeholder, `max_chars=5000`, height 300) for input, disabled `st.text_area` (placeholder "Translation", height 300) for output
 - Output text areas use `st.session_state` to set value (not the `value` parameter) to avoid stale widget state
-- Left panel (inside `left_col`): translate button (primary, `use_container_width=True`)
+- Left panel (inside `left_col`): live token counter (`st.caption`, shown only when the input is non-empty, rendered red when the prompt exceeds `MAX_PROMPT_TOKENS`) and the translate button (primary, `use_container_width=True`, `disabled` when over budget)
 - Right panel (inside `right_col`): download button (secondary, `use_container_width=True`), `disabled` when no translation
 - Download uses `st.download_button` with `mime="text/plain"`
 - `st.session_state` keys: `source_lang`, `target_lang`, `translation_result`, `source_text`, `text_output`

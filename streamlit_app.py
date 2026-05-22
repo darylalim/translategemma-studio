@@ -41,7 +41,9 @@ def build_prompt(
 
 @st.cache_resource
 def load_model() -> tuple[Any, Any]:
-    model, tokenizer = load(MODEL_ID)
+    # mlx_lm.load() returns (model, tokenizer) at runtime; ty mis-resolves
+    # its return type as a 3-tuple, so the unpack is suppressed here.
+    model, tokenizer = load(MODEL_ID)  # ty: ignore[invalid-assignment]
     tokenizer.add_eos_token("<end_of_turn>")
     return model, tokenizer
 

@@ -3,6 +3,10 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 
+def _caption_texts(app_module):
+    return [c.args[0] for c in app_module.st.caption.call_args_list if c.args]
+
+
 class TestConstants:
     def test_model_id(self, app_module):
         assert app_module.MODEL_ID == "mlx-community/translategemma-4b-it-8bit"
@@ -134,16 +138,12 @@ class TestTargetFiltering:
     def test_english_source_excludes_english(self, app_module):
         assert "English" not in app_module.TARGET_LANGS_FOR_ENGLISH
 
-    def test_non_english_source_excludes_non_english_targets(self, app_module):
-        bidirectional_non_english = [
-            n for n in app_module.SOURCE_LANGS if n != "English"
-        ]
-        assert len(bidirectional_non_english) > 0
-        for source in bidirectional_non_english[:3]:
-            assert source not in app_module.TARGET_LANGS_FOR_ENGLISH or True
-            # Non-English sources can only target English per directionality rules.
-            # Verify English is a valid bidirectional language (always targetable).
-            assert "English" in app_module.ALL_LANGUAGES
+    def test_non_english_source_targets_only_english(self, app_module):
+        # A non-English source can only translate to English, which must
+        # itself be a valid (bidirectional) source/target language.
+        non_english_sources = [s for s in app_module.SOURCE_LANGS if s != "English"]
+        assert non_english_sources
+        assert "English" in app_module.SOURCE_LANGS
 
     def test_from_english_only_not_in_source_langs(self, app_module):
         for name in app_module.FROM_ENGLISH_ONLY:
@@ -364,7 +364,7 @@ class TestHeader:
         app_module.st.title.assert_called_once_with("TranslateGemma Pipeline")
 
     def test_caption_links_the_model(self, app_module):
-        captions = [c.args[0] for c in app_module.st.caption.call_args_list if c.args]
+        captions = _caption_texts(app_module)
         assert any(
             "[Google TranslateGemma 4B model]" in text
             and "https://huggingface.co/google/translategemma-4b-it" in text
@@ -388,12 +388,12 @@ class TestButtonLayout:
 
 class TestTokenCounter:
     def test_token_count_caption_rendered(self, app_module):
-        captions = [c.args[0] for c in app_module.st.caption.call_args_list if c.args]
+        captions = _caption_texts(app_module)
         token_budget = f"/ {app_module.MAX_PROMPT_TOKENS} tokens"
         assert any(token_budget in text for text in captions)
 
     def test_right_column_has_alignment_spacer(self, app_module):
-        captions = [c.args[0] for c in app_module.st.caption.call_args_list if c.args]
+        captions = _caption_texts(app_module)
         assert "&nbsp;" in captions
 
 

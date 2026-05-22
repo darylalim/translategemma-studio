@@ -4,6 +4,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# Token count that mock tokenizers report from encode(); well under the
+# app's MAX_PROMPT_TOKENS budget so translate() accepts the prompt.
+_MOCK_PROMPT_TOKENS = 50
+
 
 @pytest.fixture(scope="session")
 def app_module():
@@ -46,7 +50,7 @@ def app_module():
     # load() returns a (model, tokenizer) pair; the tokenizer's encode()
     # must yield a real sequence so count_prompt_tokens() can len() it.
     module_tokenizer = MagicMock()
-    module_tokenizer.encode.return_value = list(range(50))
+    module_tokenizer.encode.return_value = list(range(_MOCK_PROMPT_TOKENS))
     mock_mlx_lm.load.return_value = (MagicMock(), module_tokenizer)
 
     patches = {
@@ -76,7 +80,7 @@ def app_module():
 def mock_tokenizer():
     """A mock tokenizer whose encode() returns a short, countable token list."""
     tokenizer = MagicMock()
-    tokenizer.encode.return_value = list(range(50))
+    tokenizer.encode.return_value = list(range(_MOCK_PROMPT_TOKENS))
     return tokenizer
 
 

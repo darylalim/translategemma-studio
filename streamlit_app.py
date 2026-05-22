@@ -194,6 +194,9 @@ with right_col:
         key="text_output",
     )
 
+    if text.strip():
+        st.caption("&nbsp;")  # spacer matching the left column's token counter
+
     st.download_button(
         label="Download",
         type="secondary",

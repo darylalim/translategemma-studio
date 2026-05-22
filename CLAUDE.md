@@ -56,7 +56,7 @@ The model has a 2048-token context (`CONTEXT_WINDOW`) shared by the prompt and t
 - 2-column side-by-side; `st.text_area` (no placeholder, `max_chars=MAX_INPUT_CHARS`, height 300) for input, disabled `st.text_area` (placeholder "Translation", height 300) for output
 - Output text areas use `st.session_state` to set value (not the `value` parameter) to avoid stale widget state
 - Left panel (inside `left_col`): live token counter (`st.caption`, shown only when the input is non-empty, rendered red when the prompt exceeds `MAX_PROMPT_TOKENS`) and the translate button (primary, `use_container_width=True`, `disabled` when over budget)
-- Right panel (inside `right_col`): download button (secondary, `use_container_width=True`), `disabled` when no translation
+- Right panel (inside `right_col`): a spacer `st.caption` mirroring the left column's token counter (same `text.strip()` condition — keeps the two columns vertically aligned) and the download button (secondary, `use_container_width=True`), `disabled` when no translation
 - Download uses `st.download_button` with `mime="text/plain"`
 - `st.session_state` keys: `source_lang`, `target_lang`, `translation_result`, `source_text`, `text_output`
 

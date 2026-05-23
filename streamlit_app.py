@@ -75,6 +75,12 @@ def _prepare_generation(
     return model, tokenizer, prompt, CONTEXT_WINDOW - prompt_tokens
 
 
+def _strip_eos_token(text: str) -> str:
+    # Safety net: strip <end_of_turn> and any trailing content in case
+    # the token leaks into the decoded output as literal text.
+    return text.split("<end_of_turn>", 1)[0].strip()
+
+
 def translate(
     text: str,
     src_lang: str,
@@ -86,9 +92,7 @@ def translate(
         text, src_lang, src_code, tgt_lang, tgt_code
     )
     result = generate(model, tokenizer, prompt=prompt, max_tokens=max_tokens)
-    # Safety net: strip <end_of_turn> and any trailing content in case
-    # the token leaks into the decoded output string.
-    return result.split("<end_of_turn>", 1)[0].strip()
+    return _strip_eos_token(result)
 
 
 def translate_stream(
@@ -254,9 +258,9 @@ if translate_clicked:
         try:
             # Stream the translation into the output slot as it generates,
             # in a fixed-height container matching the settled text area.
+            chunks: list[str] = []
             with output_slot.container(height=300):
                 stream_box = st.empty()
-                chunks: list[str] = []
                 for chunk in translate_stream(
                     text,
                     source,
@@ -266,9 +270,7 @@ if translate_clicked:
                 ):
                     chunks.append(chunk)
                     stream_box.text("".join(chunks))
-            # Safety net: strip <end_of_turn> if it leaked into the output.
-            result = "".join(chunks).split("<end_of_turn>", 1)[0].strip()
-            st.session_state["translation_result"] = result
+            st.session_state["translation_result"] = _strip_eos_token("".join(chunks))
             st.rerun()
         except Exception as e:
             logger.exception("Translation failed")

@@ -17,32 +17,28 @@ Translate text with the [Google TranslateGemma 4B model](https://huggingface.co/
 - **225 bidirectional** — paired with English in both directions (e.g., French, Japanese, Swahili)
 - **70 from-English-only** — can only receive translations from English (e.g., Albanian, Finnish, Tamil)
 
-Quality varies by language — 55 of the 295 have published WMT24++ benchmark scores in the technical report, while the rest are trained but not formally evaluated.
+Quality varies. 55 of the 295 have published WMT24++ benchmark scores in the technical report; the rest are trained but not formally evaluated.
 
 ## Requirements
 
 - Python 3.12+
-- Apple Silicon Mac (M-series)
+- Apple Silicon Mac
 
 ## Setup
 
-1. Install dependencies:
-
-   ```bash
-   uv sync
-   ```
-
-2. Run the application:
-
-   ```bash
-   uv run streamlit run streamlit_app.py
-   ```
+```bash
+uv sync                                  # install dependencies
+uv run streamlit run streamlit_app.py    # run the app
+```
 
 ## Development
 
 ```bash
-uv run ruff check .   # lint
-uv run ruff format .  # format
-uv run ty check       # typecheck
-uv run pytest         # run tests
+uv run ruff check .            # lint
+uv run ruff format .           # format
+uv run ty check                # typecheck
+uv run pytest                  # run tests
+uv run pytest --cov            # run tests with coverage
 ```
+
+CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck, and tests on every push to `main` and PR — on `macos-14`, since `mlx-lm` ships macOS-only wheels.

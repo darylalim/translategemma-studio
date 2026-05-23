@@ -506,6 +506,28 @@ class TestTokenCounter:
         assert "&nbsp;" in captions
 
 
+class TestOutputPlaceholder:
+    def test_output_slot_uses_st_empty_placeholder(self, app_module):
+        # The output slot in the right column is an st.empty() placeholder
+        # so the streaming handler can swap content in without re-rendering
+        # surrounding elements.
+        app_module.st.empty.assert_called_once()
+
+    def test_text_area_rendered_into_placeholder(self, app_module):
+        # When not streaming (the default path during import), the disabled
+        # translation text_area is rendered inside the placeholder — not at
+        # the top level. The args match the prior settled-view styling.
+        placeholder = app_module.st.empty.return_value
+        placeholder.text_area.assert_called_once_with(
+            "Translation output",
+            placeholder="Translation",
+            disabled=True,
+            height=300,
+            label_visibility="collapsed",
+            key="text_output",
+        )
+
+
 class TestLoadModel:
     def test_returns_model_and_tokenizer_from_load(self, app_module):
         mock_model = MagicMock()

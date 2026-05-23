@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -5,6 +6,12 @@ import pytest
 
 def _caption_texts(app_module):
     return [c.args[0] for c in app_module.st.caption.call_args_list if c.args]
+
+
+def _fake_stream(*segments):
+    # Stand in for mlx-lm's stream of GenerationResponse objects; only the
+    # .text attribute is read by translate_stream().
+    return [SimpleNamespace(text=s) for s in segments]
 
 
 class TestConstants:
@@ -352,6 +359,108 @@ class TestTranslate:
         ):
             result = app_module.translate("text", "English", "en", "Spanish", "es")
         assert result == "ok"
+
+
+class TestTranslateStream:
+    def test_yields_text_segments(self, app_module, mock_tokenizer):
+        mock_model = MagicMock()
+        with (
+            patch.object(
+                app_module, "load_model", return_value=(mock_model, mock_tokenizer)
+            ),
+            patch.object(
+                app_module,
+                "stream_generate",
+                return_value=_fake_stream("hola", " ", "mundo"),
+            ),
+        ):
+            segments = list(
+                app_module.translate_stream(
+                    "hello world", "English", "en", "Spanish", "es"
+                )
+            )
+        assert segments == ["hola", " ", "mundo"]
+
+    def test_segments_join_to_full_translation(self, app_module, mock_tokenizer):
+        mock_model = MagicMock()
+        with (
+            patch.object(
+                app_module, "load_model", return_value=(mock_model, mock_tokenizer)
+            ),
+            patch.object(
+                app_module,
+                "stream_generate",
+                return_value=_fake_stream("hola", " mundo"),
+            ),
+        ):
+            full = "".join(
+                app_module.translate_stream(
+                    "hello world", "English", "en", "Spanish", "es"
+                )
+            )
+        assert full == "hola mundo"
+
+    def test_stream_generate_called_with_correct_args(self, app_module, mock_tokenizer):
+        mock_model = MagicMock()
+        with (
+            patch.object(
+                app_module, "load_model", return_value=(mock_model, mock_tokenizer)
+            ),
+            patch.object(
+                app_module, "stream_generate", return_value=_fake_stream("hola")
+            ) as mock_stream,
+        ):
+            list(app_module.translate_stream("Hello", "English", "en", "Spanish", "es"))
+        expected_prompt = app_module.build_prompt(
+            "Hello", "English", "en", "Spanish", "es"
+        )
+        prompt_tokens = len(mock_tokenizer.encode.return_value)
+        mock_stream.assert_called_once_with(
+            mock_model,
+            mock_tokenizer,
+            prompt=expected_prompt,
+            max_tokens=app_module.CONTEXT_WINDOW - prompt_tokens,
+        )
+
+    def test_is_a_lazy_generator(self, app_module):
+        # The generator body must not run until iteration begins.
+        with patch.object(app_module, "load_model") as mock_load:
+            gen = app_module.translate_stream("Hello", "English", "en", "Spanish", "es")
+        mock_load.assert_not_called()
+        assert iter(gen) is gen
+
+    def test_raises_when_prompt_exceeds_budget(self, app_module, mock_tokenizer):
+        mock_tokenizer.encode.return_value = list(
+            range(app_module.MAX_PROMPT_TOKENS + 1)
+        )
+        with (
+            patch.object(
+                app_module, "load_model", return_value=(MagicMock(), mock_tokenizer)
+            ),
+            patch.object(app_module, "stream_generate") as mock_stream,
+        ):
+            with pytest.raises(ValueError, match="too long"):
+                list(
+                    app_module.translate_stream(
+                        "text", "English", "en", "Spanish", "es"
+                    )
+                )
+        mock_stream.assert_not_called()
+
+    def test_allows_prompt_at_budget_limit(self, app_module, mock_tokenizer):
+        mock_tokenizer.encode.return_value = list(range(app_module.MAX_PROMPT_TOKENS))
+        with (
+            patch.object(
+                app_module, "load_model", return_value=(MagicMock(), mock_tokenizer)
+            ),
+            patch.object(
+                app_module, "stream_generate", return_value=_fake_stream("ok")
+            ),
+        ):
+            segments = list(
+                app_module.translate_stream("text", "English", "en", "Spanish", "es")
+            )
+        assert segments == ["ok"]
 
 
 class TestHeader:

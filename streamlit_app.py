@@ -1,8 +1,9 @@
 import logging
+from collections.abc import Iterator
 from typing import Any
 
 import streamlit as st
-from mlx_lm import generate, load
+from mlx_lm import generate, load, stream_generate
 
 from languages import (
     ALL_LANGUAGES,
@@ -53,13 +54,15 @@ def count_prompt_tokens(prompt: str, tokenizer: Any) -> int:
     return len(tokenizer.encode(prompt))
 
 
-def translate(
+def _prepare_generation(
     text: str,
     src_lang: str,
     src_code: str,
     tgt_lang: str,
     tgt_code: str,
-) -> str:
+) -> tuple[Any, Any, str, int]:
+    # Build the prompt, load the model, enforce the token budget, and size
+    # the output. Shared by translate() and translate_stream().
     prompt = build_prompt(text, src_lang, src_code, tgt_lang, tgt_code)
     model, tokenizer = load_model()
     prompt_tokens = count_prompt_tokens(prompt, tokenizer)
@@ -69,11 +72,42 @@ def translate(
             f"(limit {MAX_PROMPT_TOKENS})."
         )
     # Hand the translation every token left in the context window.
-    max_tokens = CONTEXT_WINDOW - prompt_tokens
+    return model, tokenizer, prompt, CONTEXT_WINDOW - prompt_tokens
+
+
+def translate(
+    text: str,
+    src_lang: str,
+    src_code: str,
+    tgt_lang: str,
+    tgt_code: str,
+) -> str:
+    model, tokenizer, prompt, max_tokens = _prepare_generation(
+        text, src_lang, src_code, tgt_lang, tgt_code
+    )
     result = generate(model, tokenizer, prompt=prompt, max_tokens=max_tokens)
     # Safety net: strip <end_of_turn> and any trailing content in case
     # the token leaks into the decoded output string.
     return result.split("<end_of_turn>", 1)[0].strip()
+
+
+def translate_stream(
+    text: str,
+    src_lang: str,
+    src_code: str,
+    tgt_lang: str,
+    tgt_code: str,
+) -> Iterator[str]:
+    # Yield the translation segment-by-segment as the model generates it.
+    # <end_of_turn> is a registered EOS token, so stream_generate stops
+    # before emitting it; callers still strip it as a safety net.
+    model, tokenizer, prompt, max_tokens = _prepare_generation(
+        text, src_lang, src_code, tgt_lang, tgt_code
+    )
+    for response in stream_generate(
+        model, tokenizer, prompt=prompt, max_tokens=max_tokens
+    ):
+        yield response.text
 
 
 st.set_page_config(page_title=APP_TITLE, page_icon="\U0001f310")
@@ -182,17 +216,22 @@ with left_col:
     )
 
 prev_response = st.session_state.get("translation_result", "")
+streaming = translate_clicked and bool(text.strip())
 
 with right_col:
-    st.session_state["text_output"] = prev_response
-    st.text_area(
-        "Translation output",
-        placeholder="Translation",
-        disabled=True,
-        height=300,
-        label_visibility="collapsed",
-        key="text_output",
-    )
+    # A placeholder so the same slot can hold either the streamed output
+    # (during generation) or the settled translation (every other run).
+    output_slot = st.empty()
+    if not streaming:
+        st.session_state["text_output"] = prev_response
+        output_slot.text_area(
+            "Translation output",
+            placeholder="Translation",
+            disabled=True,
+            height=300,
+            label_visibility="collapsed",
+            key="text_output",
+        )
 
     if text.strip():
         st.caption("&nbsp;")  # spacer matching the left column's token counter
@@ -213,13 +252,22 @@ if translate_clicked:
         st.warning("Please enter text to translate.")
     else:
         try:
-            result = translate(
-                text,
-                source,
-                ALL_LANGUAGES[source],
-                target,
-                ALL_LANGUAGES[target],
-            )
+            # Stream the translation into the output slot as it generates,
+            # in a fixed-height container matching the settled text area.
+            with output_slot.container(height=300):
+                stream_box = st.empty()
+                chunks: list[str] = []
+                for chunk in translate_stream(
+                    text,
+                    source,
+                    ALL_LANGUAGES[source],
+                    target,
+                    ALL_LANGUAGES[target],
+                ):
+                    chunks.append(chunk)
+                    stream_box.text("".join(chunks))
+            # Safety net: strip <end_of_turn> if it leaked into the output.
+            result = "".join(chunks).split("<end_of_turn>", 1)[0].strip()
             st.session_state["translation_result"] = result
             st.rerun()
         except Exception as e:

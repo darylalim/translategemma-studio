@@ -4,7 +4,7 @@ Translate text with the [Google TranslateGemma 4B model](https://huggingface.co/
 
 ## Features
 
-- **Text translation** — translate text between supported languages
+- **Text translation** — translate text between supported languages, streamed in live as the model generates
 - **Token counter** — live input usage against the model's context window, with translation blocked when the input is over budget
 - **Swap languages** — swap source and target languages, moving translation output to source input
 - **Download as text** — download translation output as a `.txt` file

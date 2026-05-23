@@ -42,21 +42,24 @@ Directionality rules: bidirectional languages pair only with English (not with e
 
 ### Translation
 
-`translate(text, src_lang, src_code, tgt_lang, tgt_code)` builds the prompt, loads the model, and runs `mlx_lm.generate()`. Generation stops at `<end_of_turn>` via the registered EOS token. A safety-net split on `<end_of_turn>` strips the token if it leaks into the output string. Returns a `str` — the translated text.
+`_prepare_generation(text, src_lang, src_code, tgt_lang, tgt_code)` builds the prompt, loads the model, enforces the token budget, and returns `(model, tokenizer, prompt, max_tokens)` — shared by both translation functions.
+
+`translate(...)` runs `mlx_lm.generate()` and returns a `str` — the full translated text. `translate_stream(...)` is a generator that runs `mlx_lm.stream_generate()` and yields the translation segment-by-segment as the model produces it; the UI consumes it for live output. Generation stops at `<end_of_turn>` via the registered EOS token. A safety-net split on `<end_of_turn>` strips the token if it leaks into the output string.
 
 ### Context window
 
-The model has a 2048-token context (`CONTEXT_WINDOW`) shared by the prompt and the generated output. `count_prompt_tokens(prompt, tokenizer)` counts the tokens in a built prompt — instruction wrapper included — via `tokenizer.encode()`. `translate()` raises `ValueError` when the prompt exceeds `MAX_PROMPT_TOKENS` (1024), then sizes generation dynamically as `max_tokens = CONTEXT_WINDOW - prompt_tokens` so the translation gets all remaining room (the `<end_of_turn>` EOS still stops it early). The UI shows a live token count under the input and disables the translate button when the prompt is over budget. `MAX_INPUT_CHARS` (5000) caps the text area as a coarse backstop — it keeps the live token count cheap and bounds pathological pastes, but the token counter is the real, language-aware limit.
+The model has a 2048-token context (`CONTEXT_WINDOW`) shared by the prompt and the generated output. `count_prompt_tokens(prompt, tokenizer)` counts the tokens in a built prompt — instruction wrapper included — via `tokenizer.encode()`. `_prepare_generation()` raises `ValueError` when the prompt exceeds `MAX_PROMPT_TOKENS` (1024), then sizes generation dynamically as `max_tokens = CONTEXT_WINDOW - prompt_tokens` so the translation gets all remaining room (the `<end_of_turn>` EOS still stops it early). The UI shows a live token count under the input and disables the translate button when the prompt is over budget. `MAX_INPUT_CHARS` (5000) caps the text area as a coarse backstop — it keeps the live token count cheap and bounds pathological pastes, but the token counter is the real, language-aware limit.
 
 ### UI
 
 - Caption under the title: `st.caption` with a markdown link to the Google TranslateGemma model card
 - Language selectors: 3-column `[10, 1, 10]` layout with swap button (`:material/swap_horiz:`) in the middle, labels hidden via `label_visibility="collapsed"`
 - Swap button moves translation output to source input and clears the result; disabled when target is a from-English-only language (the only case where swap is invalid, since non-English sources always target English which is always swappable)
-- 2-column side-by-side; `st.text_area` (no placeholder, `max_chars=MAX_INPUT_CHARS`, height 300) for input, disabled `st.text_area` (placeholder "Translation", height 300) for output
+- 2-column side-by-side; `st.text_area` (no placeholder, `max_chars=MAX_INPUT_CHARS`, height 300) for input. The output side is an `st.empty()` placeholder holding either the disabled `st.text_area` (placeholder "Translation", height 300) for the settled translation or the live stream during generation
 - Output text areas use `st.session_state` to set value (not the `value` parameter) to avoid stale widget state
 - Left panel (inside `left_col`): live token counter (`st.caption`, shown only when the input is non-empty, rendered red when the prompt exceeds `MAX_PROMPT_TOKENS`) and the translate button (primary, `use_container_width=True`, `disabled` when over budget)
-- Right panel (inside `right_col`): a spacer `st.caption` mirroring the left column's token counter (same `text.strip()` condition — keeps the two columns vertically aligned) and the download button (secondary, `use_container_width=True`), `disabled` when no translation
+- Right panel (inside `right_col`): the output placeholder, a spacer `st.caption` mirroring the left column's token counter (same `text.strip()` condition — keeps the two columns vertically aligned), and the download button (secondary, `use_container_width=True`), `disabled` when no translation
+- Live output: clicking Translate streams `translate_stream()` into the output placeholder — a fixed-height (300) `st.container` updated token-by-token via `st.text` (raw text, not markdown — consistent with the text area and the `text/plain` download); on completion the result is stored in `st.session_state` and `st.rerun()` reverts the placeholder to the settled text area
 - Download uses `st.download_button` with `mime="text/plain"`
 - `st.session_state` keys: `source_lang`, `target_lang`, `translation_result`, `source_text`, `text_output`
 
@@ -79,7 +82,7 @@ prompt = f"<start_of_turn>user\n{instruction}<end_of_turn>\n<start_of_turn>model
 
 ### Strip `<end_of_turn>` from model output
 
-`load_model()` registers `<end_of_turn>` as an EOS token so generation stops early. The `translate()` split on `<end_of_turn>` is kept as a safety net in case the token leaks into the output string.
+`load_model()` registers `<end_of_turn>` as an EOS token so generation stops early. The split on `<end_of_turn>` — in `translate()` and in the streaming handler — is kept as a safety net in case the token leaks into the output string.
 
 ### Chinese uses `zh-CN` (not `zh`)
 

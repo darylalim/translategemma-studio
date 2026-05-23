@@ -44,7 +44,10 @@ Directionality rules: bidirectional languages pair only with English (not with e
 
 `_prepare_generation(text, src_lang, src_code, tgt_lang, tgt_code)` builds the prompt, loads the model, enforces the token budget, and returns `(model, tokenizer, prompt, max_tokens)` — shared by both translation functions.
 
-`translate(...)` runs `mlx_lm.generate()` and returns a `str` — the full translated text. `translate_stream(...)` is a generator that runs `mlx_lm.stream_generate()` and yields the translation segment-by-segment as the model produces it; the UI consumes it for live output. Generation stops at `<end_of_turn>` via the registered EOS token. A safety-net split on `<end_of_turn>` strips the token if it leaks into the output string.
+- `translate(...)` runs `mlx_lm.generate()` and returns the full translated text as a `str`.
+- `translate_stream(...)` is a generator that runs `mlx_lm.stream_generate()` and yields the translation segment-by-segment; the UI consumes it for live output.
+
+Generation stops at `<end_of_turn>` via the registered EOS token. A safety-net split on `<end_of_turn>` strips the token if it leaks into the output string.
 
 ### Context window
 
@@ -55,12 +58,11 @@ The model has a 2048-token context (`CONTEXT_WINDOW`) shared by the prompt and t
 - Caption under the title: `st.caption` with a markdown link to the Google TranslateGemma model card
 - Language selectors: 3-column `[10, 1, 10]` layout with swap button (`:material/swap_horiz:`) in the middle, labels hidden via `label_visibility="collapsed"`
 - Swap button moves translation output to source input and clears the result; disabled when target is a from-English-only language (the only case where swap is invalid, since non-English sources always target English which is always swappable)
-- 2-column side-by-side; `st.text_area` (no placeholder, `max_chars=MAX_INPUT_CHARS`, height 300) for input. The output side is an `st.empty()` placeholder holding either the disabled `st.text_area` (placeholder "Translation", height 300) for the settled translation or the live stream during generation
-- Output text areas use `st.session_state` to set value (not the `value` parameter) to avoid stale widget state
+- 2-column side-by-side; input is `st.text_area` (no placeholder, `max_chars=MAX_INPUT_CHARS`, height 300); output is an `st.empty()` placeholder holding either the disabled `st.text_area` (placeholder "Translation", height 300) for the settled translation or the live stream during generation
 - Left panel (inside `left_col`): live token counter (`st.caption`, shown only when the input is non-empty, rendered red when the prompt exceeds `MAX_PROMPT_TOKENS`) and the translate button (primary, `use_container_width=True`, `disabled` when over budget)
-- Right panel (inside `right_col`): the output placeholder, a spacer `st.caption` mirroring the left column's token counter (same `text.strip()` condition — keeps the two columns vertically aligned), and the download button (secondary, `use_container_width=True`), `disabled` when no translation
-- Live output: clicking Translate streams `translate_stream()` into the output placeholder — a fixed-height (300) `st.container` updated token-by-token via `st.text` (raw text, not markdown — consistent with the text area and the `text/plain` download); on completion the result is stored in `st.session_state` and `st.rerun()` reverts the placeholder to the settled text area
-- Download uses `st.download_button` with `mime="text/plain"`
+- Right panel (inside `right_col`): the output placeholder, a spacer `st.caption` mirroring the left column's token counter (same `text.strip()` condition — keeps the two columns vertically aligned), and the download button (`st.download_button`, secondary, `mime="text/plain"`, `use_container_width=True`, `disabled` when no translation)
+- Streaming: clicking Translate feeds `translate_stream()` into the output placeholder — a fixed-height (300) `st.container` updated token-by-token via `st.text` (raw text, not markdown, to match the text area and the `text/plain` download); on completion the result is saved to `st.session_state` and `st.rerun()` reverts the placeholder to the settled text area
+- Output text areas use `st.session_state` to set value (not the `value` parameter) to avoid stale widget state
 - `st.session_state` keys: `source_lang`, `target_lang`, `translation_result`, `source_text`, `text_output`
 
 ## Known Issues

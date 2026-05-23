@@ -129,36 +129,6 @@ class TestSwapLanguages:
         assert "source_text" not in mock_state
 
 
-class TestTargetFiltering:
-    def test_english_source_includes_bidirectional_targets(self, app_module):
-        targets = set(app_module.TARGET_LANGS_FOR_ENGLISH)
-        assert "French" in targets
-        assert "Japanese" in targets
-        assert "Swahili" in targets
-
-    def test_english_source_includes_from_english_only_targets(self, app_module):
-        targets = set(app_module.TARGET_LANGS_FOR_ENGLISH)
-        assert "Albanian" in targets
-        assert "Ukrainian" in targets
-        assert "Tamil" in targets
-
-    def test_english_source_excludes_english(self, app_module):
-        assert "English" not in app_module.TARGET_LANGS_FOR_ENGLISH
-
-    def test_non_english_source_targets_only_english(self, app_module):
-        # A non-English source can only translate to English, which must
-        # itself be a valid (bidirectional) source/target language.
-        non_english_sources = [s for s in app_module.SOURCE_LANGS if s != "English"]
-        assert non_english_sources
-        assert "English" in app_module.SOURCE_LANGS
-
-    def test_from_english_only_not_in_source_langs(self, app_module):
-        for name in app_module.FROM_ENGLISH_ONLY:
-            assert name not in app_module.SOURCE_LANGS, (
-                f"{name} is from-English-only but appears in SOURCE_LANGS"
-            )
-
-
 class TestSwapDisabled:
     def test_swap_enabled_for_bidirectional_target(self, app_module):
         mock_state = {"target_lang": "Spanish"}
@@ -225,199 +195,104 @@ class TestTranslate:
             "Hello", "English", "en", "Spanish", "es"
         )
         prompt_tokens = len(patched_translate["tokenizer"].encode.return_value)
-        app_module.generate.assert_called_once_with(
+        patched_translate["generate"].assert_called_once_with(
             patched_translate["model"],
             patched_translate["tokenizer"],
             prompt=expected_prompt,
             max_tokens=app_module.CONTEXT_WINDOW - prompt_tokens,
         )
 
-    def test_generate_called_exactly_once(self, app_module, patched_translate):
+    def test_generate_called_exactly_once(self, patched_translate):
         patched_translate["translate"]("Hello", "English", "en", "Spanish", "es")
-        assert app_module.generate.call_count == 1
+        assert patched_translate["generate"].call_count == 1
 
-    def test_strips_end_of_turn_token(self, app_module, mock_tokenizer):
-        mock_model = MagicMock()
-        with (
-            patch.object(
-                app_module,
-                "load_model",
-                return_value=(mock_model, mock_tokenizer),
+    @pytest.mark.parametrize(
+        "generated,expected",
+        [
+            pytest.param("hola mundo<end_of_turn>", "hola mundo", id="single_eos"),
+            pytest.param(
+                "hola mundo<end_of_turn><end_of_turn><end_of_turn>",
+                "hola mundo",
+                id="repeated_eos",
             ),
-            patch.object(
-                app_module,
-                "generate",
-                return_value="hola mundo<end_of_turn>",
+            pytest.param("hola mundo", "hola mundo", id="clean_output"),
+            pytest.param("  hola mundo  <end_of_turn>", "hola mundo", id="whitespace"),
+            pytest.param(
+                "hola mundo<end_of_turn>extra garbage",
+                "hola mundo",
+                id="garbage_after_eos",
             ),
-        ):
-            result = app_module.translate(
-                "hello world", "English", "en", "Spanish", "es"
-            )
-        assert result == "hola mundo"
+        ],
+    )
+    def test_strips_eos_from_generated_output(
+        self, patched_translate, generated, expected
+    ):
+        patched_translate["generate"].return_value = generated
+        result = patched_translate["translate"](
+            "hello world", "English", "en", "Spanish", "es"
+        )
+        assert result == expected
 
-    def test_strips_repeated_end_of_turn_tokens(self, app_module, mock_tokenizer):
-        mock_model = MagicMock()
-        with (
-            patch.object(
-                app_module,
-                "load_model",
-                return_value=(mock_model, mock_tokenizer),
-            ),
-            patch.object(
-                app_module,
-                "generate",
-                return_value="hola mundo<end_of_turn><end_of_turn><end_of_turn>",
-            ),
-        ):
-            result = app_module.translate(
-                "hello world", "English", "en", "Spanish", "es"
-            )
-        assert result == "hola mundo"
-
-    def test_clean_output_unchanged(self, app_module, mock_tokenizer):
-        mock_model = MagicMock()
-        with (
-            patch.object(
-                app_module,
-                "load_model",
-                return_value=(mock_model, mock_tokenizer),
-            ),
-            patch.object(
-                app_module,
-                "generate",
-                return_value="hola mundo",
-            ),
-        ):
-            result = app_module.translate(
-                "hello world", "English", "en", "Spanish", "es"
-            )
-        assert result == "hola mundo"
-
-    def test_strips_whitespace_around_translation(self, app_module, mock_tokenizer):
-        mock_model = MagicMock()
-        with (
-            patch.object(
-                app_module,
-                "load_model",
-                return_value=(mock_model, mock_tokenizer),
-            ),
-            patch.object(
-                app_module,
-                "generate",
-                return_value="  hola mundo  <end_of_turn>",
-            ),
-        ):
-            result = app_module.translate(
-                "hello world", "English", "en", "Spanish", "es"
-            )
-        assert result == "hola mundo"
-
-    def test_strips_content_after_end_of_turn(self, app_module, mock_tokenizer):
-        mock_model = MagicMock()
-        with (
-            patch.object(
-                app_module,
-                "load_model",
-                return_value=(mock_model, mock_tokenizer),
-            ),
-            patch.object(
-                app_module,
-                "generate",
-                return_value="hola mundo<end_of_turn>extra garbage",
-            ),
-        ):
-            result = app_module.translate(
-                "hello world", "English", "en", "Spanish", "es"
-            )
-        assert result == "hola mundo"
-
-    def test_raises_when_prompt_exceeds_budget(self, app_module, mock_tokenizer):
+    def test_raises_when_prompt_exceeds_budget(
+        self, app_module, patched_translate, mock_tokenizer
+    ):
         mock_tokenizer.encode.return_value = list(
             range(app_module.MAX_PROMPT_TOKENS + 1)
         )
-        with (
-            patch.object(
-                app_module,
-                "load_model",
-                return_value=(MagicMock(), mock_tokenizer),
-            ),
-            patch.object(app_module, "generate") as mock_generate,
-        ):
-            with pytest.raises(ValueError, match="too long"):
-                app_module.translate("text", "English", "en", "Spanish", "es")
-        mock_generate.assert_not_called()
+        with pytest.raises(ValueError, match="too long"):
+            patched_translate["translate"]("text", "English", "en", "Spanish", "es")
+        patched_translate["generate"].assert_not_called()
 
-    def test_allows_prompt_at_budget_limit(self, app_module, mock_tokenizer):
+    def test_allows_prompt_at_budget_limit(
+        self, app_module, patched_translate, mock_tokenizer
+    ):
         mock_tokenizer.encode.return_value = list(range(app_module.MAX_PROMPT_TOKENS))
-        with (
-            patch.object(
-                app_module,
-                "load_model",
-                return_value=(MagicMock(), mock_tokenizer),
-            ),
-            patch.object(app_module, "generate", return_value="ok"),
-        ):
-            result = app_module.translate("text", "English", "en", "Spanish", "es")
+        patched_translate["generate"].return_value = "ok"
+        result = patched_translate["translate"](
+            "text", "English", "en", "Spanish", "es"
+        )
         assert result == "ok"
 
 
 class TestTranslateStream:
-    def test_yields_text_segments(self, app_module, mock_tokenizer):
-        mock_model = MagicMock()
-        with (
-            patch.object(
-                app_module, "load_model", return_value=(mock_model, mock_tokenizer)
-            ),
-            patch.object(
-                app_module,
-                "stream_generate",
-                return_value=_fake_stream("hola", " ", "mundo"),
-            ),
-        ):
-            segments = list(
-                app_module.translate_stream(
-                    "hello world", "English", "en", "Spanish", "es"
-                )
+    def test_yields_text_segments(self, patched_translate):
+        patched_translate["stream_generate"].return_value = _fake_stream(
+            "hola", " ", "mundo"
+        )
+        segments = list(
+            patched_translate["translate_stream"](
+                "hello world", "English", "en", "Spanish", "es"
             )
+        )
         assert segments == ["hola", " ", "mundo"]
 
-    def test_segments_join_to_full_translation(self, app_module, mock_tokenizer):
-        mock_model = MagicMock()
-        with (
-            patch.object(
-                app_module, "load_model", return_value=(mock_model, mock_tokenizer)
-            ),
-            patch.object(
-                app_module,
-                "stream_generate",
-                return_value=_fake_stream("hola", " mundo"),
-            ),
-        ):
-            full = "".join(
-                app_module.translate_stream(
-                    "hello world", "English", "en", "Spanish", "es"
-                )
+    def test_segments_join_to_full_translation(self, patched_translate):
+        patched_translate["stream_generate"].return_value = _fake_stream(
+            "hola", " mundo"
+        )
+        full = "".join(
+            patched_translate["translate_stream"](
+                "hello world", "English", "en", "Spanish", "es"
             )
+        )
         assert full == "hola mundo"
 
-    def test_stream_generate_called_with_correct_args(self, app_module, mock_tokenizer):
-        mock_model = MagicMock()
-        with (
-            patch.object(
-                app_module, "load_model", return_value=(mock_model, mock_tokenizer)
-            ),
-            patch.object(
-                app_module, "stream_generate", return_value=_fake_stream("hola")
-            ) as mock_stream,
-        ):
-            list(app_module.translate_stream("Hello", "English", "en", "Spanish", "es"))
+    def test_stream_generate_called_with_correct_args(
+        self, app_module, patched_translate
+    ):
+        patched_translate["stream_generate"].return_value = _fake_stream("hola")
+        list(
+            patched_translate["translate_stream"](
+                "Hello", "English", "en", "Spanish", "es"
+            )
+        )
         expected_prompt = app_module.build_prompt(
             "Hello", "English", "en", "Spanish", "es"
         )
-        prompt_tokens = len(mock_tokenizer.encode.return_value)
-        mock_stream.assert_called_once_with(
-            mock_model,
-            mock_tokenizer,
+        prompt_tokens = len(patched_translate["tokenizer"].encode.return_value)
+        patched_translate["stream_generate"].assert_called_once_with(
+            patched_translate["model"],
+            patched_translate["tokenizer"],
             prompt=expected_prompt,
             max_tokens=app_module.CONTEXT_WINDOW - prompt_tokens,
         )
@@ -429,37 +304,30 @@ class TestTranslateStream:
         mock_load.assert_not_called()
         assert iter(gen) is gen
 
-    def test_raises_when_prompt_exceeds_budget(self, app_module, mock_tokenizer):
+    def test_raises_when_prompt_exceeds_budget(
+        self, app_module, patched_translate, mock_tokenizer
+    ):
         mock_tokenizer.encode.return_value = list(
             range(app_module.MAX_PROMPT_TOKENS + 1)
         )
-        with (
-            patch.object(
-                app_module, "load_model", return_value=(MagicMock(), mock_tokenizer)
-            ),
-            patch.object(app_module, "stream_generate") as mock_stream,
-        ):
-            with pytest.raises(ValueError, match="too long"):
-                list(
-                    app_module.translate_stream(
-                        "text", "English", "en", "Spanish", "es"
-                    )
+        with pytest.raises(ValueError, match="too long"):
+            list(
+                patched_translate["translate_stream"](
+                    "text", "English", "en", "Spanish", "es"
                 )
-        mock_stream.assert_not_called()
-
-    def test_allows_prompt_at_budget_limit(self, app_module, mock_tokenizer):
-        mock_tokenizer.encode.return_value = list(range(app_module.MAX_PROMPT_TOKENS))
-        with (
-            patch.object(
-                app_module, "load_model", return_value=(MagicMock(), mock_tokenizer)
-            ),
-            patch.object(
-                app_module, "stream_generate", return_value=_fake_stream("ok")
-            ),
-        ):
-            segments = list(
-                app_module.translate_stream("text", "English", "en", "Spanish", "es")
             )
+        patched_translate["stream_generate"].assert_not_called()
+
+    def test_allows_prompt_at_budget_limit(
+        self, app_module, patched_translate, mock_tokenizer
+    ):
+        mock_tokenizer.encode.return_value = list(range(app_module.MAX_PROMPT_TOKENS))
+        patched_translate["stream_generate"].return_value = _fake_stream("ok")
+        segments = list(
+            patched_translate["translate_stream"](
+                "text", "English", "en", "Spanish", "es"
+            )
+        )
         assert segments == ["ok"]
 
 
@@ -556,3 +424,83 @@ class TestLoadModel:
         ):
             app_module.load_model()
         mock_tokenizer.add_eos_token.assert_called_once_with("<end_of_turn>")
+
+
+class TestStreamingClickPath:
+    """End-to-end tests using Streamlit's AppTest harness.
+
+    Covers UI branches that import-time MagicMock fixtures can't reach:
+    the streaming click path, the model-load error handler, runtime
+    target-list filtering, and the empty-text warning.
+    """
+
+    def test_translate_click_streams_into_session_state(self, app_test, fake_mlx_lm):
+        fake_mlx_lm.stream_generate.return_value = [
+            SimpleNamespace(text="Hola"),
+            SimpleNamespace(text=" "),
+            SimpleNamespace(text="mundo"),
+        ]
+        app_test.text_area(key="source_text").input("Hello").run()
+        app_test.button(key="translate_text").click().run()
+
+        assert app_test.session_state["translation_result"] == "Hola mundo"
+        fake_mlx_lm.stream_generate.assert_called_once()
+
+    def test_over_budget_input_disables_translate_button(
+        self, app_test, mock_tokenizer
+    ):
+        # Force the cached tokenizer to report > MAX_PROMPT_TOKENS (1024).
+        mock_tokenizer.encode.return_value = list(range(2000))
+        # set_value bypasses max_chars so we can stage any prompt length.
+        app_test.text_area(key="source_text").set_value("text").run()
+
+        assert app_test.button(key="translate_text").disabled is True
+        assert any("too long" in c.value for c in app_test.caption)
+
+    def test_translation_exception_logs_and_shows_error(
+        self, app_test, fake_mlx_lm, caplog
+    ):
+        fake_mlx_lm.stream_generate.side_effect = RuntimeError("model crashed")
+        app_test.text_area(key="source_text").input("Hello").run()
+        with caplog.at_level("ERROR"):
+            app_test.button(key="translate_text").click().run()
+
+        assert any("model crashed" in e.value for e in app_test.error)
+        assert any("Translation failed" in r.message for r in caplog.records)
+
+    def test_model_load_failure_logs_and_shows_error(
+        self, app_test_unrun, fake_mlx_lm, caplog
+    ):
+        fake_mlx_lm.load.side_effect = RuntimeError("model gone")
+        with caplog.at_level("ERROR"):
+            app_test_unrun.run()
+
+        assert any("Failed to load model" in e.value for e in app_test_unrun.error)
+        assert any("Failed to load model" in r.message for r in caplog.records)
+
+    def test_non_english_source_restricts_target_to_english(self, app_test):
+        # Default state: source=English, target=Spanish.
+        # Switching source to a bidirectional non-English language must
+        # collapse valid targets to ["English"] and reset target_lang.
+        app_test.selectbox(key="source_lang").select("French").run()
+
+        assert app_test.session_state["source_lang"] == "French"
+        assert app_test.session_state["target_lang"] == "English"
+
+    def test_empty_text_translate_click_shows_warning(self, app_test):
+        # Default source_text is empty; clicking Translate should warn,
+        # not invoke the model.
+        app_test.button(key="translate_text").click().run()
+
+        assert any(
+            "Please enter text to translate" in w.value for w in app_test.warning
+        )
+
+    def test_swap_button_swaps_source_and_target(self, app_test):
+        assert app_test.session_state["source_lang"] == "English"
+        assert app_test.session_state["target_lang"] == "Spanish"
+        # The swap button renders before the translate button, so it's button[0].
+        app_test.button[0].click().run()
+
+        assert app_test.session_state["source_lang"] == "Spanish"
+        assert app_test.session_state["target_lang"] == "English"

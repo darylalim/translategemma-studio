@@ -71,6 +71,11 @@ Directionality: bidirectional languages pair only with English (not with each ot
 - **Streaming** — Translate feeds `translate_stream()` into a fixed-height (300) `st.container`, updated token-by-token via `st.text` (raw text, not markdown — matches the text area and the `text/plain` download). On completion the result is saved to `st.session_state["translation_result"]` and `st.rerun()` reverts the placeholder to the settled text area.
 - **Session state keys** — `source_lang`, `target_lang`, `translation_result`, `source_text`, `text_output`
 - **State seeding** — output text areas are populated via session state (not the `value=` parameter) to avoid stale widget state
+- **1.58 conventions** — buttons size with `width="stretch"` (the deprecated `use_container_width` was removed); the page icon and the `st.error`/`st.warning` callouts use Material Symbols (`:material/...:`)
+
+### Theme
+
+`.streamlit/config.toml` applies a Material Design 3 theme (violet `#6750A4` primary, Roboto via Google Fonts) with `[theme.light]` and `[theme.dark]` variants, which gives the in-app light/dark switcher. The file is git-tracked — `.gitignore` keeps `config.toml` while ignoring `secrets.toml` and the rest of `.streamlit/`.
 
 ## Testing
 
@@ -118,6 +123,10 @@ The registered EOS token usually stops generation before `<end_of_turn>` appears
 ### Chinese uses `zh-CN`, not `zh`
 
 The locale code matches the TranslateGemma Technical Report (Table 5). Since prompts are built manually, the code is inserted as text — and the model was trained with these locale codes.
+
+### Theme variant keys are top-level-only
+
+`base` and `chartCategoricalColors` are valid only in the top-level `[theme]` section, not inside `[theme.light]`/`[theme.dark]`. Streamlit only *logs* a warning for an invalid config key rather than raising, so `TestThemeConfig` validates every `config.toml` key against Streamlit's option template to catch regressions.
 
 ## Prompt Template
 

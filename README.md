@@ -9,6 +9,7 @@ Translate text with the [Google TranslateGemma 4B model](https://huggingface.co/
 - **Token counter** — live input usage against the model's context window, with translation blocked when the input is over budget
 - **Swap languages** — swap source and target languages, moving translation output to source input
 - **Download as text** — download translation output as a `.txt` file
+- **Light and dark mode** — Material Design styling with an in-app theme switcher
 
 ## Supported Languages
 

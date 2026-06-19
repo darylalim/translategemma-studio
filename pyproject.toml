@@ -18,6 +18,11 @@ dev = [
     "ty",
 ]
 
+[tool.ruff.lint]
+# I: import sorting (isort); UP: pyupgrade; B: bugbear; C4: comprehensions;
+# RUF: ruff-specific; SIM: simplify
+extend-select = ["I", "UP", "B", "C4", "RUF", "SIM"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = [

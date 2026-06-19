@@ -156,10 +156,7 @@ source = col1.selectbox(
     label_visibility="collapsed",
 )
 
-if source == "English":
-    valid_targets = TARGET_LANGS_FOR_ENGLISH
-else:
-    valid_targets = ["English"]
+valid_targets = TARGET_LANGS_FOR_ENGLISH if source == "English" else ["English"]
 if st.session_state["target_lang"] not in valid_targets:
     st.session_state["target_lang"] = valid_targets[0]
 

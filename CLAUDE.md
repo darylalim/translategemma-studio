@@ -18,6 +18,7 @@ Translate text with the [Google TranslateGemma 4B model](https://huggingface.co/
 - `snake_case` for functions and variables, `PascalCase` for classes
 - Type annotations on all parameters and returns
 - Formatting and import sorting handled by ruff
+- Ruff lint rules beyond the defaults are set in `[tool.ruff.lint]` via `extend-select`: `I` (import sorting), `UP` (pyupgrade), `B` (bugbear), `C4` (comprehensions), `RUF` (ruff-specific), `SIM` (simplify) — enforced by `uv run ruff check .` and CI
 
 ## Dependencies
 

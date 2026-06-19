@@ -97,7 +97,7 @@ class TestSourceLangs:
     def test_source_langs_is_sorted(self):
         from languages import SOURCE_LANGS
 
-        assert SOURCE_LANGS == sorted(SOURCE_LANGS)
+        assert sorted(SOURCE_LANGS) == SOURCE_LANGS
 
     def test_source_langs_only_contains_bidirectional(self):
         from languages import BIDIRECTIONAL, SOURCE_LANGS
@@ -114,7 +114,7 @@ class TestTargetLangsForEnglish:
     def test_target_langs_for_english_is_sorted(self):
         from languages import TARGET_LANGS_FOR_ENGLISH
 
-        assert TARGET_LANGS_FOR_ENGLISH == sorted(TARGET_LANGS_FOR_ENGLISH)
+        assert sorted(TARGET_LANGS_FOR_ENGLISH) == TARGET_LANGS_FOR_ENGLISH
 
     def test_english_not_in_target_langs_for_english(self):
         from languages import TARGET_LANGS_FOR_ENGLISH

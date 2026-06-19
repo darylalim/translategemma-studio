@@ -1,0 +1,56 @@
+# Material UI theme — Google's Material Design 3 aesthetic, on-brand for a
+# Google model. Both light and dark palettes are defined, so Streamlit shows
+# the in-app light/dark switcher. Fonts load from Google Fonts (no local files).
+#
+# Note: `base` and `chartCategoricalColors` are top-level-only options — they
+# are not valid inside the [theme.light]/[theme.dark] variant sections.
+
+[theme]
+base = "light"
+# Shared across both modes: typography, shape, borders.
+font = "'Roboto':https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap"
+codeFont = "'Roboto Mono':https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&display=swap"
+codeFontSize = "14px"
+baseFontSize = 14
+baseFontWeight = 400
+headingFontSizes = ["36px", "28px", "22px", "18px", "16px", "14px"]
+headingFontWeights = [400, 400, 500, 500, 500, 500]
+baseRadius = "16px"
+buttonRadius = "full"
+linkUnderline = false
+showWidgetBorder = false
+showSidebarBorder = false
+
+[theme.light]
+primaryColor = "#6750A4"
+backgroundColor = "#FFFBFE"
+secondaryBackgroundColor = "#F7F2FA"
+codeBackgroundColor = "#E8DEF8"
+codeTextColor = "#1C1B1F"
+textColor = "#1C1B1F"
+linkColor = "#6750A4"
+borderColor = "#CAC4D0"
+# Material Design 3 light semantic colors (drive :red badges, st.error, etc.)
+redColor = "#B3261E"
+greenColor = "#386A20"
+blueColor = "#006874"
+violetColor = "#6750A4"
+orangeColor = "#924C25"
+yellowColor = "#7C5800"
+
+[theme.dark]
+primaryColor = "#D0BCFF"
+backgroundColor = "#1C1B1F"
+secondaryBackgroundColor = "#2B2930"
+codeBackgroundColor = "#36343B"
+codeTextColor = "#E6E1E5"
+textColor = "#E6E1E5"
+linkColor = "#D0BCFF"
+borderColor = "#49454F"
+# Material Design 3 dark semantic colors
+redColor = "#F2B8B5"
+greenColor = "#A6D388"
+blueColor = "#4FD8EB"
+violetColor = "#D0BCFF"
+orangeColor = "#E8B387"
+yellowColor = "#E4C66A"

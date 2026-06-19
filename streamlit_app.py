@@ -114,7 +114,7 @@ def translate_stream(
         yield response.text
 
 
-st.set_page_config(page_title=APP_TITLE, page_icon="\U0001f310")
+st.set_page_config(page_title=APP_TITLE, page_icon=":material/translate:")
 st.title(APP_TITLE)
 st.caption(
     "Translate text with the [Google TranslateGemma 4B model]"
@@ -131,7 +131,7 @@ try:
         model, tokenizer = load_model()
 except Exception as e:
     logger.exception("Failed to load model")
-    st.error(f"Failed to load model: {e}")
+    st.error(f"Failed to load model: {e}", icon=":material/error:")
     st.stop()
 
 
@@ -148,7 +148,7 @@ def _swap_languages() -> None:
 
 
 # --- Language selectors ---
-col1, col_swap, col2 = st.columns([10, 1, 10])
+col1, col_swap, col2 = st.columns([10, 1, 10], vertical_alignment="center")
 source = col1.selectbox(
     "Source language",
     SOURCE_LANGS,
@@ -172,7 +172,7 @@ with col_swap:
     st.button(
         ":material/swap_horiz:",
         type="tertiary",
-        use_container_width=True,
+        width="stretch",
         on_click=_swap_languages,
         help="Swap languages",
         disabled=not can_swap,
@@ -203,16 +203,19 @@ with left_col:
         )
         prompt_tokens = count_prompt_tokens(preview, tokenizer)
         over_budget = prompt_tokens > MAX_PROMPT_TOKENS
-        usage = f"{prompt_tokens} / {MAX_PROMPT_TOKENS} tokens"
+        st.caption(f"{prompt_tokens} / {MAX_PROMPT_TOKENS} tokens")
         if over_budget:
-            usage = f":red[{usage} — too long to translate]"
-        st.caption(usage)
+            st.badge(
+                "Too long to translate",
+                icon=":material/error:",
+                color="red",
+            )
 
     translate_clicked = st.button(
         "Translate",
         type="primary",
         key="translate_text",
-        use_container_width=True,
+        width="stretch",
         disabled=over_budget,
     )
 
@@ -235,7 +238,7 @@ with right_col:
         )
 
     if text.strip():
-        st.caption("&nbsp;")  # spacer matching the left column's token counter
+        st.space("small")  # spacer matching the left column's token counter
 
     st.download_button(
         label="Download",
@@ -245,12 +248,12 @@ with right_col:
         mime="text/plain",
         key="download_text",
         disabled=not prev_response,
-        use_container_width=True,
+        width="stretch",
     )
 
 if translate_clicked:
     if not text.strip():
-        st.warning("Please enter text to translate.")
+        st.warning("Please enter text to translate.", icon=":material/warning:")
     else:
         try:
             # Stream the translation into the output slot as it generates,
@@ -271,4 +274,4 @@ if translate_clicked:
             st.rerun()
         except Exception as e:
             logger.exception("Translation failed")
-            st.error(f"Translation failed: {e}")
+            st.error(f"Translation failed: {e}", icon=":material/error:")

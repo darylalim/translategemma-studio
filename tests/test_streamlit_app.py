@@ -356,7 +356,7 @@ class TestButtonLayout:
 
     def test_language_selector_columns(self, app_module):
         calls = app_module.st.columns.call_args_list
-        assert calls[0] == call([10, 1, 10])
+        assert calls[0] == call([10, 1, 10], vertical_alignment="center")
 
     def test_content_columns(self, app_module):
         calls = app_module.st.columns.call_args_list
@@ -370,8 +370,7 @@ class TestTokenCounter:
         assert any(token_budget in text for text in captions)
 
     def test_right_column_has_alignment_spacer(self, app_module):
-        captions = _caption_texts(app_module)
-        assert "&nbsp;" in captions
+        app_module.st.space.assert_called_once_with("small")
 
 
 class TestOutputPlaceholder:
@@ -455,7 +454,7 @@ class TestStreamingClickPath:
         app_test.text_area(key="source_text").set_value("text").run()
 
         assert app_test.button(key="translate_text").disabled is True
-        assert any("too long" in c.value for c in app_test.caption)
+        assert any("Too long to translate" in m.value for m in app_test.markdown)
 
     def test_translation_exception_logs_and_shows_error(
         self, app_test, fake_mlx_lm, caplog

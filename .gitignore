@@ -1,8 +1,9 @@
 # Secrets
 .env
 
-# Streamlit
-.streamlit/
+# Streamlit — track config.toml (theme/server settings); ignore secrets and anything else
+.streamlit/*
+!.streamlit/config.toml
 
 # Python
 .venv/

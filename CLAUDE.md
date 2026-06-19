@@ -68,11 +68,11 @@ Directionality: bidirectional languages pair only with English (not with each ot
 - **Swap button** — calls `_swap_languages()` to swap source/target and move the previous translation into the source area; disabled when target is `FROM_ENGLISH_ONLY` (the only invalid swap, since non-English sources always pair with English)
 - **Body** — two side-by-side columns:
   - **Left** — `st.text_area` (`key="source_text"`, height 300, `max_chars=MAX_INPUT_CHARS`); live token counter caption with a red over-budget `st.badge`; Translate button (primary, full-width, disabled when over budget)
-  - **Right** — `st.empty()` placeholder holding either the disabled output `st.text_area` (height 300) or the streaming container during generation; alignment spacer (`st.space`); Download button (secondary, `mime="text/plain"`, disabled when no result)
+  - **Right** — `st.empty()` placeholder holding either the disabled output `st.text_area` (height 300) or the streaming container during generation; alignment-spacer caption; Download button (secondary, `mime="text/plain"`, disabled when no result)
 - **Streaming** — Translate feeds `translate_stream()` into a fixed-height (300) `st.container`, updated token-by-token via `st.text` (raw text, not markdown — matches the text area and the `text/plain` download). On completion the result is saved to `st.session_state["translation_result"]` and `st.rerun()` reverts the placeholder to the settled text area.
 - **Session state keys** — `source_lang`, `target_lang`, `translation_result`, `source_text`, `text_output`
 - **State seeding** — output text areas are populated via session state (not the `value=` parameter) to avoid stale widget state
-- **1.58 conventions** — buttons size with `width="stretch"` (the deprecated `use_container_width` was removed); the page icon and the `st.error`/`st.warning` callouts use Material Symbols (`:material/...:`)
+- **1.58 conventions** — buttons size with `width="stretch"` (replacing the deprecated `use_container_width`, which 1.58 still accepts but plans to remove); the page icon and the `st.error`/`st.warning` callouts use Material Symbols (`:material/...:`)
 
 ### Theme
 

@@ -2,8 +2,8 @@
 # Google model. Both light and dark palettes are defined, so Streamlit shows
 # the in-app light/dark switcher. Fonts load from Google Fonts (no local files).
 #
-# Note: `base` and `chartCategoricalColors` are top-level-only options — they
-# are not valid inside the [theme.light]/[theme.dark] variant sections.
+# Note: `base` is a top-level-only option — it is not valid inside the
+# [theme.light]/[theme.dark] variant sections.
 
 [theme]
 base = "light"
@@ -39,7 +39,7 @@ orangeColor = "#924C25"
 yellowColor = "#7C5800"
 
 [theme.dark]
-primaryColor = "#D0BCFF"
+primaryColor = "#7F67BE"
 backgroundColor = "#1C1B1F"
 secondaryBackgroundColor = "#2B2930"
 codeBackgroundColor = "#36343B"

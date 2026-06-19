@@ -238,7 +238,7 @@ with right_col:
         )
 
     if text.strip():
-        st.space("small")  # spacer matching the left column's token counter
+        st.caption("&nbsp;")  # spacer matching the left column's token counter
 
     st.download_button(
         label="Download",

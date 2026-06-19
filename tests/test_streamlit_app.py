@@ -376,7 +376,8 @@ class TestTokenCounter:
         assert any(token_budget in text for text in captions)
 
     def test_right_column_has_alignment_spacer(self, app_module):
-        app_module.st.space.assert_called_once_with("small")
+        captions = _caption_texts(app_module)
+        assert "&nbsp;" in captions
 
 
 class TestOutputPlaceholder:
@@ -549,12 +550,17 @@ class TestThemeConfig:
 
     def test_defines_light_and_dark_variants(self):
         theme = self._load()["theme"]
-        assert "light" in theme
-        assert "dark" in theme
+        # Non-empty variants are what make Streamlit show the in-app
+        # light/dark switcher (see the config.toml header comment).
+        assert theme.get("light"), "theme.light must define palette colors"
+        assert theme.get("dark"), "theme.dark must define palette colors"
 
     def test_all_keys_are_valid_streamlit_options(self):
         from streamlit import config
 
-        valid = set(config._config_options_template)
+        # Prefer the side-effect-free option-definition template; fall back to
+        # the public API if a future Streamlit renames the private attribute.
+        options = getattr(config, "_config_options_template", None)
+        valid = set(options or config.get_config_options())
         invalid = [k for k in self._flatten(self._load()) if k not in valid]
         assert invalid == [], f"Invalid config options: {invalid}"

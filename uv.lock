@@ -1394,7 +1394,7 @@ wheels = [
 ]
 
 [[package]]
-name = "translategemma-pipeline"
+name = "translategemma-studio"
 version = "0.12.0"
 source = { virtual = "." }
 dependencies = [

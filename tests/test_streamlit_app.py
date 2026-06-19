@@ -335,10 +335,10 @@ class TestHeader:
     def test_page_title(self, app_module):
         app_module.st.set_page_config.assert_called_once()
         kwargs = app_module.st.set_page_config.call_args.kwargs
-        assert kwargs["page_title"] == "TranslateGemma Pipeline"
+        assert kwargs["page_title"] == "TranslateGemma Studio"
 
     def test_title(self, app_module):
-        app_module.st.title.assert_called_once_with("TranslateGemma Pipeline")
+        app_module.st.title.assert_called_once_with("TranslateGemma Studio")
 
     def test_caption_links_the_model(self, app_module):
         captions = _caption_texts(app_module)

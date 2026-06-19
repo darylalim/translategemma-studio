@@ -1,5 +1,5 @@
 [project]
-name = "translategemma-pipeline"
+name = "translategemma-studio"
 version = "0.12.0"
 description = "Translate text with the Google TranslateGemma 4B model on Apple Silicon with MLX."
 readme = "README.md"

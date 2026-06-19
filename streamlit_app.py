@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
-APP_TITLE = "TranslateGemma Pipeline"
+APP_TITLE = "TranslateGemma Studio"
 MODEL_ID = "mlx-community/translategemma-4b-it-8bit"
 CONTEXT_WINDOW = 2048  # model's total context (prompt + output), per the model card
 MAX_PROMPT_TOKENS = 1024  # prompt cap; leaves >=1024 tokens for the translation

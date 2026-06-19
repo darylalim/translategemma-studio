@@ -1,3 +1,5 @@
+import tomllib
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
@@ -337,6 +339,10 @@ class TestHeader:
         kwargs = app_module.st.set_page_config.call_args.kwargs
         assert kwargs["page_title"] == "TranslateGemma Studio"
 
+    def test_page_icon(self, app_module):
+        kwargs = app_module.st.set_page_config.call_args.kwargs
+        assert kwargs["page_icon"] == ":material/translate:"
+
     def test_title(self, app_module):
         app_module.st.title.assert_called_once_with("TranslateGemma Studio")
 
@@ -454,7 +460,14 @@ class TestStreamingClickPath:
         app_test.text_area(key="source_text").set_value("text").run()
 
         assert app_test.button(key="translate_text").disabled is True
-        assert any("Too long to translate" in m.value for m in app_test.markdown)
+        # The over-budget indicator renders as a red badge (a markdown
+        # element) carrying the error icon, not inline caption text.
+        assert any(
+            "red-badge[" in m.value
+            and ":material/error:" in m.value
+            and "Too long to translate" in m.value
+            for m in app_test.markdown
+        )
 
     def test_translation_exception_logs_and_shows_error(
         self, app_test, fake_mlx_lm, caplog
@@ -465,6 +478,7 @@ class TestStreamingClickPath:
             app_test.button(key="translate_text").click().run()
 
         assert any("model crashed" in e.value for e in app_test.error)
+        assert any(e.icon == ":material/error:" for e in app_test.error)
         assert any("Translation failed" in r.message for r in caplog.records)
 
     def test_model_load_failure_logs_and_shows_error(
@@ -475,6 +489,7 @@ class TestStreamingClickPath:
             app_test_unrun.run()
 
         assert any("Failed to load model" in e.value for e in app_test_unrun.error)
+        assert any(e.icon == ":material/error:" for e in app_test_unrun.error)
         assert any("Failed to load model" in r.message for r in caplog.records)
 
     def test_non_english_source_restricts_target_to_english(self, app_test):
@@ -494,6 +509,7 @@ class TestStreamingClickPath:
         assert any(
             "Please enter text to translate" in w.value for w in app_test.warning
         )
+        assert any(w.icon == ":material/warning:" for w in app_test.warning)
 
     def test_swap_button_swaps_source_and_target(self, app_test):
         assert app_test.session_state["source_lang"] == "English"
@@ -503,3 +519,42 @@ class TestStreamingClickPath:
 
         assert app_test.session_state["source_lang"] == "Spanish"
         assert app_test.session_state["target_lang"] == "English"
+
+
+class TestThemeConfig:
+    """Guard .streamlit/config.toml against invalid theme option keys.
+
+    Streamlit only *logs* a warning for an unknown config option, so an
+    invalid key (e.g. a per-variant ``base``) slips past the rest of the
+    suite — the running server is the only place it surfaces. These tests
+    check every key against Streamlit's own option template, the same lookup
+    the runtime uses.
+    """
+
+    _CONFIG_PATH = Path(__file__).parent.parent / ".streamlit" / "config.toml"
+
+    def _load(self):
+        return tomllib.loads(self._CONFIG_PATH.read_text())
+
+    def _flatten(self, mapping, prefix=""):
+        for key, value in mapping.items():
+            dotted = f"{prefix}{key}"
+            if isinstance(value, dict):
+                yield from self._flatten(value, f"{dotted}.")
+            else:
+                yield dotted
+
+    def test_config_file_exists(self):
+        assert self._CONFIG_PATH.is_file()
+
+    def test_defines_light_and_dark_variants(self):
+        theme = self._load()["theme"]
+        assert "light" in theme
+        assert "dark" in theme
+
+    def test_all_keys_are_valid_streamlit_options(self):
+        from streamlit import config
+
+        valid = set(config._config_options_template)
+        invalid = [k for k in self._flatten(self._load()) if k not in valid]
+        assert invalid == [], f"Invalid config options: {invalid}"

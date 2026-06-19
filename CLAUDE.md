@@ -66,18 +66,19 @@ Directionality: bidirectional languages pair only with English (not with each ot
 - **Language selectors** — `[10, 1, 10]` column layout with the swap button (`:material/swap_horiz:`) in the middle; labels collapsed
 - **Swap button** — calls `_swap_languages()` to swap source/target and move the previous translation into the source area; disabled when target is `FROM_ENGLISH_ONLY` (the only invalid swap, since non-English sources always pair with English)
 - **Body** — two side-by-side columns:
-  - **Left** — `st.text_area` (`key="source_text"`, height 300, `max_chars=MAX_INPUT_CHARS`); live token counter caption (red when over budget); Translate button (primary, full-width, disabled when over budget)
-  - **Right** — `st.empty()` placeholder holding either the disabled output `st.text_area` (height 300) or the streaming container during generation; alignment-spacer caption; Download button (secondary, `mime="text/plain"`, disabled when no result)
+  - **Left** — `st.text_area` (`key="source_text"`, height 300, `max_chars=MAX_INPUT_CHARS`); live token counter caption with a red over-budget `st.badge`; Translate button (primary, full-width, disabled when over budget)
+  - **Right** — `st.empty()` placeholder holding either the disabled output `st.text_area` (height 300) or the streaming container during generation; alignment spacer (`st.space`); Download button (secondary, `mime="text/plain"`, disabled when no result)
 - **Streaming** — Translate feeds `translate_stream()` into a fixed-height (300) `st.container`, updated token-by-token via `st.text` (raw text, not markdown — matches the text area and the `text/plain` download). On completion the result is saved to `st.session_state["translation_result"]` and `st.rerun()` reverts the placeholder to the settled text area.
 - **Session state keys** — `source_lang`, `target_lang`, `translation_result`, `source_text`, `text_output`
 - **State seeding** — output text areas are populated via session state (not the `value=` parameter) to avoid stale widget state
 
 ## Testing
 
-Two layers, ~1s combined for 83 tests at 100% coverage:
+Two layers plus a config guard, ~1s combined for 87 tests at 100% coverage:
 
 - **Import-time tests** — swap `sys.modules["streamlit"]` and `sys.modules["mlx_lm"]` for `MagicMock`s, import `streamlit_app.py`, then assert on captured `st.*` calls. No Streamlit runtime runs. Covers pure functions, layout, token counting, EOS stripping.
 - **End-to-end tests** (`TestStreamingClickPath`) — drive the real script via `streamlit.testing.v1.AppTest` with only `mlx_lm` mocked. Reaches branches the import-time tests can't: streaming click path, model-load failure, runtime target filtering, swap-button wiring, empty-text warning.
+- **Theme-config guard** (`TestThemeConfig`) — validates `.streamlit/config.toml` keys against Streamlit's option template (`config._config_options_template`), the same lookup the runtime uses. Catches invalid theme keys (e.g. a per-variant `base`) that Streamlit only *logs* a warning for, so they'd otherwise slip past the suite.
 
 **Fixtures (`tests/conftest.py`):**
 

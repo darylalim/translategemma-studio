@@ -1,7 +1,7 @@
 [project]
 name = "translategemma-studio"
 version = "0.13.0"
-description = "Translate text with the Google TranslateGemma 4B model on Apple Silicon with MLX."
+description = "Streamlit application for translation using Google TranslateGemma on Apple Silicon with MLX."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"

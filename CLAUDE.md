@@ -1,6 +1,6 @@
 # TranslateGemma Studio
 
-Translate text with the [Google TranslateGemma 4B model](https://huggingface.co/google/translategemma-4b-it) on Apple Silicon with MLX.
+Streamlit application for translation using the [Google TranslateGemma model](https://huggingface.co/google/translategemma-4b-it) on Apple Silicon with MLX.
 
 ## Commands
 

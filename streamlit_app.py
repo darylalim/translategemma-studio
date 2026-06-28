@@ -116,10 +116,6 @@ def translate_stream(
 
 st.set_page_config(page_title=APP_TITLE, page_icon=":material/translate:")
 st.title(APP_TITLE)
-st.caption(
-    "Translate text with the [Google TranslateGemma 4B model]"
-    "(https://huggingface.co/google/translategemma-4b-it)."
-)
 
 # --- Session state defaults ---
 st.session_state.setdefault("source_lang", "English")

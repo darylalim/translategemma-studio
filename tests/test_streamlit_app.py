@@ -346,14 +346,6 @@ class TestHeader:
     def test_title(self, app_module):
         app_module.st.title.assert_called_once_with("TranslateGemma Studio")
 
-    def test_caption_links_the_model(self, app_module):
-        captions = _caption_texts(app_module)
-        assert any(
-            "[Google TranslateGemma 4B model]" in text
-            and "https://huggingface.co/google/translategemma-4b-it" in text
-            for text in captions
-        )
-
 
 class TestButtonLayout:
     def test_columns_called_twice(self, app_module):

@@ -63,7 +63,7 @@ Directionality: bidirectional languages pair only with English (not with each ot
 
 ### UI
 
-- **Header** — `st.title` plus `st.caption` linking the model card
+- **Header** — `st.title` only
 - **Language selectors** — `[10, 1, 10]` column layout with the swap button (`:material/swap_horiz:`) in the middle; labels collapsed
 - **Swap button** — calls `_swap_languages()` to swap source/target and move the previous translation into the source area; disabled when target is `FROM_ENGLISH_ONLY` (the only invalid swap, since non-English sources always pair with English)
 - **Body** — two side-by-side columns:

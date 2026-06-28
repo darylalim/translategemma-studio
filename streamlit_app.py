@@ -193,7 +193,7 @@ with left_col:
     # Live token usage against the model's context window.
     over_budget = False
     if text.strip():
-        _, tokenizer = load_model()
+        # `tokenizer` is already bound from the module-level load above.
         preview = build_prompt(
             text,
             source,

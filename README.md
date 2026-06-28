@@ -1,6 +1,6 @@
 # TranslateGemma Studio
 
-Streamlit application for translation using the [Google TranslateGemma model](https://huggingface.co/google/translategemma-4b-it) on Apple Silicon with MLX.
+Streamlit application for translation using [Google TranslateGemma](https://huggingface.co/google/translategemma-4b-it) on Apple Silicon with MLX.
 
 ## Features
 

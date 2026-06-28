@@ -1,6 +1,6 @@
 [project]
 name = "translategemma-studio"
-version = "0.13.0"
+version = "0.13.1"
 description = "Streamlit application for translation using Google TranslateGemma on Apple Silicon with MLX."
 readme = "README.md"
 license = "MIT"

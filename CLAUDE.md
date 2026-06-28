@@ -1,6 +1,6 @@
 # TranslateGemma Studio
 
-Streamlit application for translation using the [Google TranslateGemma model](https://huggingface.co/google/translategemma-4b-it) on Apple Silicon with MLX.
+Streamlit application for translation using [Google TranslateGemma](https://huggingface.co/google/translategemma-4b-it) on Apple Silicon with MLX.
 
 ## Commands
 
@@ -64,6 +64,7 @@ Directionality: bidirectional languages pair only with English (not with each ot
 ### UI
 
 - **Header** — `st.title` only
+- **Layout** — default centered (no `layout=` kwarg); a focused two-panel tool relies on the readable-width cap, guarded by `test_page_layout_is_centered`
 - **Language selectors** — `[10, 1, 10]` column layout with the swap button (`:material/swap_horiz:`) in the middle; labels collapsed
 - **Swap button** — calls `_swap_languages()` to swap source/target and move the previous translation into the source area; disabled when target is `FROM_ENGLISH_ONLY` (the only invalid swap, since non-English sources always pair with English)
 - **Body** — two side-by-side columns:

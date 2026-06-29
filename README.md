@@ -1,6 +1,16 @@
 # TranslateGemma Studio
 
-Streamlit application for translation using [Google TranslateGemma](https://huggingface.co/google/translategemma-4b-it) on Apple Silicon with MLX.
+[![CI](https://github.com/darylalim/translategemma-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/darylalim/translategemma-studio/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/darylalim/translategemma-studio)](https://github.com/darylalim/translategemma-studio/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Python](https://img.shields.io/badge/python-3.12+-blue.svg)
+
+Translate text between 295 languages entirely on your Mac — no cloud, no API keys, nothing leaves your machine. A Streamlit app that runs Google's [TranslateGemma](https://huggingface.co/google/translategemma-4b-it) locally on Apple Silicon via MLX.
+
+<p align="center">
+  <img src="assets/screenshot-light.png" width="49%" alt="TranslateGemma Studio in light mode" />
+  <img src="assets/screenshot-dark.png" width="49%" alt="TranslateGemma Studio in dark mode" />
+</p>
 
 ## Features
 
@@ -20,10 +30,15 @@ Streamlit application for translation using [Google TranslateGemma](https://hugg
 
 Quality varies. 55 of the 295 have published WMT24++ benchmark scores in the technical report; the rest are trained but not formally evaluated.
 
+## Model
+
+Runs the 8-bit MLX quant [`mlx-community/translategemma-4b-it-8bit`](https://huggingface.co/mlx-community/translategemma-4b-it-8bit) (~4B parameters). On first launch it downloads from the Hugging Face Hub (~4–5 GB) and is cached; later runs load from that cache. All inference is local.
+
 ## Requirements
 
 - Python 3.12+
 - Apple Silicon Mac
+- ~4–5 GB free disk for the model, and 8 GB+ unified memory recommended
 
 ## Setup
 

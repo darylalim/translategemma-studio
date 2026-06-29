@@ -43,3 +43,9 @@ uv run pytest --cov            # run tests with coverage
 ```
 
 CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck, and tests on every push to `main` and PR — on `macos-14`, since `mlx-lm` ships macOS-only wheels.
+
+## License
+
+This project's code is released under the [MIT License](LICENSE).
+
+The TranslateGemma model it downloads at runtime is subject to Google's [Gemma Terms of Use](https://ai.google.dev/gemma/terms) — the MIT License covers the code in this repository, not the model weights.

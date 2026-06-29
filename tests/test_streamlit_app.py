@@ -344,9 +344,8 @@ class TestHeader:
         assert kwargs["page_icon"] == ":material/translate:"
 
     def test_page_layout_is_centered(self, app_module):
-        # Layout is deliberately the default centered (no layout= kwarg): a
-        # focused single-task tool with two prose text areas relies on the
-        # readable-width cap. This guards against an accidental switch to wide.
+        # Layout must stay centered (default or explicit); guards against an
+        # accidental switch to wide.
         kwargs = app_module.st.set_page_config.call_args.kwargs
         assert kwargs.get("layout") in (None, "centered")
 

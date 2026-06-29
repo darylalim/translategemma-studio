@@ -124,7 +124,7 @@ st.session_state.setdefault("target_lang", "Spanish")
 # --- Model loading ---
 try:
     with st.spinner("Loading model..."):
-        model, tokenizer = load_model()
+        _, tokenizer = load_model()
 except Exception as e:
     logger.exception("Failed to load model")
     st.error(f"Failed to load model: {e}", icon=":material/error:")

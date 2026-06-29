@@ -43,6 +43,8 @@ Directionality: bidirectional languages pair only with English (not with each ot
 
 `load_model()` returns `(model, tokenizer)`, cached with `@st.cache_resource`. Loads `mlx-community/translategemma-4b-it-8bit` via `mlx_lm.load()` and registers `<end_of_turn>` as an EOS token so generation stops early instead of running to the `max_tokens` cap.
 
+The module configures `logging.basicConfig(INFO)` (silencing `httpx` to `WARNING`); both the model-load and translation failure paths call `logger.exception(...)` alongside their `st.error` callouts.
+
 ### Translation
 
 `_prepare_generation()` builds the prompt, loads the model, enforces the token budget, and returns `(model, tokenizer, prompt, max_tokens)` — shared by both entry points:
@@ -99,7 +101,7 @@ Two layers plus a config guard, ~1s combined for 87 tests at 100% coverage:
 
 **Pytest config (`pyproject.toml`):** `addopts = ["-ra", "--strict-markers", "--strict-config"]`, `xfail_strict = true`, `filterwarnings = ["error"]`. Coverage sources in `[tool.coverage.run]`.
 
-**CI (`.github/workflows/ci.yml`):** ruff + ty + pytest on `macos-14` (required for `mlx-lm`) for every push to `main` and PR.
+**CI (`.github/workflows/ci.yml`):** `ruff check` + `ruff format --check` + `ty` + `pytest` on `macos-14` (required for `mlx-lm`) for every push to `main` and PR.
 
 ## Known Issues
 

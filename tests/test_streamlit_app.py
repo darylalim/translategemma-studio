@@ -88,16 +88,14 @@ class TestSwapLanguages:
         mock_state = {"source_lang": "English", "target_lang": "Spanish"}
         with patch.object(app_module.st, "session_state", mock_state):
             app_module._swap_languages()
-        assert mock_state["source_lang"] == "Spanish"
-        assert mock_state["target_lang"] == "English"
+        assert mock_state == {"source_lang": "Spanish", "target_lang": "English"}
 
     def test_swap_is_reversible(self, app_module):
         mock_state = {"source_lang": "English", "target_lang": "French"}
         with patch.object(app_module.st, "session_state", mock_state):
             app_module._swap_languages()
             app_module._swap_languages()
-        assert mock_state["source_lang"] == "English"
-        assert mock_state["target_lang"] == "French"
+        assert mock_state == {"source_lang": "English", "target_lang": "French"}
 
     def test_swap_copies_translation_to_source_text(self, app_module):
         mock_state = {
@@ -107,8 +105,11 @@ class TestSwapLanguages:
         }
         with patch.object(app_module.st, "session_state", mock_state):
             app_module._swap_languages()
-        assert mock_state["source_text"] == "hola"
-        assert "translation_result" not in mock_state
+        assert mock_state == {
+            "source_lang": "Spanish",
+            "target_lang": "English",
+            "source_text": "hola",
+        }
 
     def test_double_swap_with_translation_is_not_reversible(self, app_module):
         mock_state = {
@@ -119,16 +120,17 @@ class TestSwapLanguages:
         with patch.object(app_module.st, "session_state", mock_state):
             app_module._swap_languages()
             app_module._swap_languages()
-        assert mock_state["source_lang"] == "English"
-        assert mock_state["target_lang"] == "Spanish"
-        assert mock_state["source_text"] == "hola"
-        assert "translation_result" not in mock_state
+        assert mock_state == {
+            "source_lang": "English",
+            "target_lang": "Spanish",
+            "source_text": "hola",
+        }
 
     def test_swap_without_translation_does_not_set_source_text(self, app_module):
         mock_state = {"source_lang": "English", "target_lang": "Spanish"}
         with patch.object(app_module.st, "session_state", mock_state):
             app_module._swap_languages()
-        assert "source_text" not in mock_state
+        assert mock_state == {"source_lang": "Spanish", "target_lang": "English"}
 
 
 class TestSwapDisabled:
@@ -154,8 +156,7 @@ class TestSwapDisabled:
         }
         with patch.object(app_module.st, "session_state", mock_state):
             app_module._swap_languages()
-        assert mock_state["source_lang"] == "English"
-        assert mock_state["target_lang"] == "Albanian"
+        assert mock_state == {"source_lang": "English", "target_lang": "Albanian"}
 
     def test_swap_guard_allows_bidirectional(self, app_module):
         mock_state = {
@@ -164,8 +165,7 @@ class TestSwapDisabled:
         }
         with patch.object(app_module.st, "session_state", mock_state):
             app_module._swap_languages()
-        assert mock_state["source_lang"] == "French"
-        assert mock_state["target_lang"] == "English"
+        assert mock_state == {"source_lang": "French", "target_lang": "English"}
 
 
 class TestCountPromptTokens:

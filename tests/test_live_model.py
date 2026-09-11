@@ -3,12 +3,12 @@
 Deselected by default (`-m "not live"` in `addopts`) because it loads the full
 3.9 GB quant and runs real inference. Run it with `uv run pytest -m live`.
 
-Every other test replaces `mlx_lm` with a `MagicMock`, so the suite cannot see
-runtime breakage in the MLX stack: an `mlx-lm`/`mlx` pairing that returns an
-empty translation still passes all 87 mocked tests at 100% coverage. This is
-the only test that would notice, which makes it worth running by hand after
-any `mlx` or `mlx-lm` bump. See Known Issues in CLAUDE.md for the failure that
-prompted it.
+No other test loads the real `mlx_lm` (the ones that touch it swap in a
+`MagicMock`), so the suite cannot see runtime breakage in the MLX stack: an
+`mlx-lm`/`mlx` pairing that returns an empty translation still passes all 86
+other tests at 100% coverage. This is the only test that would notice, which
+makes it worth running by hand after any `mlx` or `mlx-lm` bump. See Known
+Issues in CLAUDE.md for the failure that prompted it.
 """
 
 from pathlib import Path

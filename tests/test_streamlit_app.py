@@ -490,6 +490,18 @@ class TestStreamingClickPath:
         assert any(e.icon == ":material/error:" for e in app_test_unrun.error)
         assert any("Failed to load model" in r.message for r in caplog.records)
 
+    def test_model_load_unexpected_shape_logs_and_shows_error(
+        self, app_test_unrun, fake_mlx_lm, caplog
+    ):
+        # load(return_config=True) yields a 3-tuple; load_model() must refuse
+        # anything but (model, tokenizer) rather than unpack it by accident.
+        fake_mlx_lm.load.return_value = (MagicMock(), MagicMock(), {})
+        with caplog.at_level("ERROR"):
+            app_test_unrun.run()
+
+        assert any("expected 2" in e.value for e in app_test_unrun.error)
+        assert any("Failed to load model" in r.message for r in caplog.records)
+
     def test_non_english_source_restricts_target_to_english(self, app_test):
         # Default state: source=English, target=Spanish.
         # Switching source to a bidirectional non-English language must

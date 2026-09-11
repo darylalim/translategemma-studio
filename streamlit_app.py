@@ -18,7 +18,9 @@ logger = logging.getLogger(__name__)
 
 APP_TITLE = "TranslateGemma Studio"
 MODEL_ID = "mlx-community/translategemma-4b-it-8bit"
-CONTEXT_WINDOW = 2048  # model's total context (prompt + output), per the model card
+# Self-imposed prompt + output budget. The model card lists a 2K *input* context;
+# the quant's max_position_embeddings (131072) allows far more.
+CONTEXT_WINDOW = 2048
 MAX_PROMPT_TOKENS = 1024  # prompt cap; leaves >=1024 tokens for the translation
 MAX_INPUT_CHARS = 5000  # coarse backstop; the token counter is the real gate
 
@@ -43,9 +45,12 @@ def build_prompt(
 
 @st.cache_resource
 def load_model() -> tuple[Any, Any]:
-    # mlx_lm.load() returns (model, tokenizer) at runtime; ty mis-resolves
-    # its return type as a 3-tuple, so the unpack is suppressed here.
-    model, tokenizer = load(MODEL_ID)  # ty: ignore[invalid-assignment]
+    # mlx_lm.load() is annotated as a 2-tuple | 3-tuple union (return_config=True
+    # yields the 3-tuple); the length check narrows it without a suppression.
+    loaded = load(MODEL_ID)
+    if len(loaded) != 2:
+        raise RuntimeError(f"mlx_lm.load() returned {len(loaded)} values, expected 2")
+    model, tokenizer = loaded
     tokenizer.add_eos_token("<end_of_turn>")
     return model, tokenizer
 

@@ -56,7 +56,7 @@ Python is floored at `>=3.12` in `pyproject.toml` and pinned to `3.12` by `.pyth
 
 Dev-group floors (`pytest>=8.4`, `pytest-cov>=7.1.0`, `ruff>=0.16`, `ty>=0.0.69`) pin the tools whose output *is* the CI contract — a lower `ruff` can format differently and a lower `ty` can emit different diagnostics, either of which fails the build. `pytest-cov` is what makes the documented `uv run pytest --cov` work.
 
-Floors record the oldest version verified to work; `uv.lock` still pins the exact resolution, and CI installs from the lock (`uv sync --locked`) — so the floors are never the versions CI actually exercises. Most installed versions sit well above them. Verify a floor change with `uv lock --resolution lowest-direct && uv sync --frozen`, then run the gate. Undo it afterwards: plain `uv sync` re-resolves to highest and discards the floor lock (it prints a one-line notice but never fails), and uv stamps the strategy into the lockfile as an `[options] resolution-mode` block — this repo's `uv.lock` has no `[options]` block, which is the at-a-glance proof it was resolved at the default `highest`. `uv lock --check` verifies the lock matches `pyproject.toml` locally, before CI does.
+Floors record the oldest version verified to work; `uv.lock` still pins the exact resolution, and CI installs from the lock (`uv sync --locked`) — so the floors are never the versions CI actually exercises. Most installed versions sit well above them. Verify a floor change with `uv lock --resolution lowest-direct && uv sync --frozen`, then run the gate with `--frozen` on every command (`uv run --frozen ruff check . && uv run --frozen ruff format --check . && uv run --frozen ty check && uv run --frozen pytest`) — a plain `uv run` re-resolves to highest and reinstalls before the first command runs, so the unmodified gate never exercises the floors. (The `PostToolUse` hook runs `uv run --no-sync`, so editing a `.py` file mid-verification does not re-lock either.) Undo it afterwards: plain `uv sync` (or any `uv run` without `--frozen`) re-resolves to highest and discards the floor lock (it prints a one-line notice but never fails), and uv stamps the strategy into the lockfile as an `[options] resolution-mode` block — this repo's `uv.lock` has no `[options]` block, which is the at-a-glance proof it was resolved at the default `highest`. `uv lock --check` verifies the lock matches `pyproject.toml` locally, before CI does.
 
 ## Architecture
 
@@ -71,11 +71,13 @@ Derived constants: `ALL_LANGUAGES` (merged for name → code lookup), `SOURCE_LA
 
 Directionality: bidirectional languages pair only with English (not with each other). The swap button is disabled when swapping would produce an invalid pair.
 
-`ALL_LANGUAGES` is a `{**BIDIRECTIONAL, **FROM_ENGLISH_ONLY}` merge, which would silently last-wins a duplicate key. Two tested invariants make that safe: the dicts share no keys, and every code across the merge is unique — both matter when adding a regional variant. The counts are also asserted in five separate places across `tests/test_languages.py` and `tests/test_streamlit_app.py`, so adding a language means updating more than one number.
+`ALL_LANGUAGES` is a `{**BIDIRECTIONAL, **FROM_ENGLISH_ONLY}` merge, which would silently last-wins a duplicate key. Two tested invariants make that safe: the dicts share no keys, and every code across the merge is unique — both matter when adding a regional variant. The counts are also asserted in nine separate places across `tests/test_languages.py` and `tests/test_streamlit_app.py`, so adding a language means updating more than one number.
 
 ### Model Loading
 
 `load_model()` returns `(model, tokenizer)`, cached with `@st.cache_resource`. Loads `mlx-community/translategemma-4b-it-8bit` via `mlx_lm.load()` and registers `<end_of_turn>` as an EOS token so generation stops early instead of running to the `max_tokens` cap.
+
+`mlx_lm.load()` is annotated as a `tuple[Module, TokenizerWrapper] | tuple[Module, TokenizerWrapper, dict]` union (the 3-tuple is the `return_config=True` branch) with no `Literal`-keyed overloads, so a bare two-name unpack fails `ty check`. `load_model()` narrows it with a length check and raises on anything else rather than carrying a `# ty: ignore` — a suppression would turn into an `unused-ignore-comment` warning, which fails the gate, the day `mlx-lm` adds overloads.
 
 The module configures `logging.basicConfig(INFO)` (silencing `httpx` to `WARNING`); both the model-load and translation failure paths call `logger.exception(...)` alongside their `st.error` callouts.
 
@@ -137,7 +139,7 @@ The structured form works, but this app builds the prompt as a raw string instea
 prompt = f"<start_of_turn>user\n{instruction}<end_of_turn>\n<start_of_turn>model\n"
 ```
 
-This is safe only because the raw string reproduces the trained format exactly. `build_prompt()`'s instruction text is byte-identical to the quant's own `chat_template.jinja`; the sole difference across the whole prompt is that `apply_chat_template` emits a leading `<bos>` and `build_prompt()` does not — the tokenizer supplies it instead, since the quant ships `add_bos_token: true`. Anything that bypasses that (`encode(..., add_special_tokens=False)`, a different runtime) silently drops `<bos>`. Re-verify after a quant bump by rendering both and diffing the instruction text.
+This is safe only because the raw string reproduces the trained format exactly. `build_prompt()`'s instruction text is byte-identical to the quant's own `chat_template.jinja`; the sole difference across the whole prompt is that `apply_chat_template` emits a leading `<bos>` and `build_prompt()` does not — the tokenizer supplies it instead. The mechanism is the quant's `tokenizer.json`, which ships a `TemplateProcessing` post-processor (`single = [<bos>, $A]`) that `encode()` applies whenever `add_special_tokens=True` — the default, and what mlx-lm passes for any prompt that does not already start with `<bos>`. The `add_bos_token: true` in `tokenizer_config.json` is inert: transformers v5 discards that key whenever a `tokenizer.json` is present, so `tokenizer.add_bos_token` reads `False` even though `<bos>` is prepended — the attribute is not evidence either way. Anything that bypasses the post-processor (`encode(..., add_special_tokens=False)`, a different runtime) silently drops `<bos>`. Re-verify after a quant, `transformers`, or `tokenizers` bump by rendering both and diffing the instruction text, and by checking `encode()` yields exactly one `<bos>`.
 
 ### Chinese uses `zh-CN`, not `zh`
 
@@ -151,7 +153,7 @@ The mocked layers cannot catch this: they replace `mlx_lm` with a `MagicMock`, s
 
 ## Testing
 
-Two mocked layers, a plain unit layer, and a config guard, ~1s combined for 85 tests at 100% coverage, plus one opt-in live test that runs against the real model:
+Two mocked layers, a plain unit layer, and a config guard, ~1s combined for 86 tests at 100% coverage, plus one opt-in live test that runs against the real model:
 
 - **Import-time tests** — swap `sys.modules["streamlit"]` and `sys.modules["mlx_lm"]` for `MagicMock`s, import `streamlit_app.py`, then assert on captured `st.*` calls. No Streamlit runtime runs. Covers pure functions, layout, token counting, EOS stripping.
 - **End-to-end tests** (`TestStreamingClickPath`) — drive the real script via `streamlit.testing.v1.AppTest` with only `mlx_lm` mocked. Reaches branches the import-time tests can't: streaming click path, model-load failure, runtime target filtering, swap-button wiring, empty-text warning.
@@ -193,10 +195,10 @@ Releases are cut by the `release` job in `.github/workflows/ci.yml`. **Bumping `
 - **Version/lockfile drift is already covered.** `uv.lock` records the project's own version, so a bump without a matching `uv lock` fails `uv sync --locked` in `test`; the release job needs no check of its own.
 - **`permissions: contents: write` is required at the job level.** The repo's `default_workflow_permissions` is `read`, so the token is read-only unless a job asks for more; without it `gh release create` fails with a 403.
 - **`concurrency: {group: release, cancel-in-progress: false}`** queues rather than cancels, so two pushes landing together cannot race to create the same tag and a half-finished release is never killed.
-- **`gh release create --target "$GITHUB_SHA"` creates the tag as part of the release** — a lightweight tag, matching `v0.13.1`/`v0.14.0`. `--generate-notes` builds the body from commits since the previous release.
+- **`gh release create --target "$GITHUB_SHA"` creates the tag as part of the release** — a lightweight tag, matching `v0.13.1`/`v0.14.0`. `--generate-notes` builds the body from merged PRs since the previous release — with direct pushes, as here, that is just the compare link.
 - The tag value reaches the shell through `env:` rather than `${{ }}` interpolation, so a crafted `pyproject.toml` version cannot break out into the run script.
 
-The publish path has **not yet run for real** — both existing releases were created by hand before the job landed, and its one execution took the already-tagged no-op branch. Watch the first genuine bump.
+The publish path first ran for real on the `v0.15.0` bump (2026-08-10): `github-actions[bot]` created the release with generated notes. `v0.13.1` and `v0.14.0` were created by hand before the job landed.
 
 To reword a release afterwards, `gh release edit vX.Y.Z --notes "..."` (or the GitHub UI) — the job never touches a release that already exists.
 
@@ -222,7 +224,7 @@ from playwright.sync_api import sync_playwright
 TEXT = "Good morning! I would like to book a table for two at seven o'clock."
 HIDE = """
 document.querySelectorAll(
-    '[data-testid="stToolbar"],[data-testid="stStatusWidget"],[data-testid="stDecoration"]'
+    '[data-testid="stToolbar"],[data-testid="stStatusWidget"]'
 ).forEach((e) => (e.style.display = "none"))
 """
 
@@ -267,7 +269,7 @@ with sync_playwright() as p:
 `.claude/settings.json` is git-tracked, so its hooks apply to every clone rather than one machine. Two hooks, both sub-100ms. A file watcher picks up edits to the file mid-session; `/hooks` shows what is actually live and which settings file it came from.
 
 - **`PreToolUse` on `Edit|Write`** — denies writes to `uv.lock`, `.env`, and `.streamlit/secrets.toml`. Change `uv.lock` through uv (`uv add` / `uv lock` / `uv sync`); the two gitignored secret files are edited by hand. The `case` matches the bare filename with an optional directory prefix, so `.env.example` and `uv.lock.bak` pass through. A deny is signalled by a JSON payload on **stdout with exit 0**, not by `exit 2`.
-- **`PostToolUse` on `Edit|Write`** — runs `ruff format` then `ruff check --fix` on the edited file when it ends in `.py`. It is a convenience, not a gate: the command ends in `|| true`, so failures are printed and swallowed, and `--fix` only repairs *fixable* rules. `uv run ruff check .` still has to pass before pushing.
+- **`PostToolUse` on `Edit|Write`** — runs `ruff format` then `ruff check --fix` on the edited file when it ends in `.py`, via `uv run --no-sync` so it never syncs or re-locks the environment (see Dependencies for why that matters mid floor-verification). It is a convenience, not a gate: the command ends in `|| true`, so failures are printed and swallowed, and `--fix` only repairs *fixable* rules. `uv run ruff check .` still has to pass before pushing.
 
 **No hook runs the tests or the type checker.** Two `Stop` hooks used to, and were removed deliberately: `Stop` fires once per *turn* rather than once per *change*, so conversational turns ran the full suite and a whole-project `ty check` against code nobody touched — and `exit 2` on `Stop` prevents the turn from ending, letting an unrelated or pre-existing failure hijack the conversation. Run the gate explicitly after changing Python; otherwise CI is the first thing that sees a failure. Do not reinstate them as `Stop` hooks.
 

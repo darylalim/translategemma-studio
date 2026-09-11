@@ -59,7 +59,7 @@ uv run pytest -m live          # run the live-model test (loads the real quant)
 
 The live test is deselected by default, since it loads the full 3.9 GB model. Run it after any `mlx` or `mlx-lm` upgrade — the rest of the suite mocks `mlx_lm`, so it cannot see a stack that loads fine but generates nothing.
 
-CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck, and tests on every push to `main` and PR — on `macos-latest`, since `mlx-lm` ships macOS-only wheels.
+CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck, and tests on every push to `main` and PR — on `macos-latest`, since `mlx-lm` only depends on `mlx` on macOS and `mlx`'s macOS wheels are arm64-only.
 
 ## Releases
 

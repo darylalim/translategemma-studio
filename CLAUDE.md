@@ -49,7 +49,7 @@ Each of these is explained in full further down; they are collected here because
 
 ## Dependencies
 
-- `streamlit>=1.58` — web UI; the floor is the oldest release verified to work, while `uv.lock` resolves 1.61.1. The UI's widget conventions are recorded under Architecture → UI and are not tied to a specific release.
+- `streamlit>=1.58` — web UI; the floor is the oldest release verified to work, while `uv.lock` resolves 1.63.0. The UI's widget conventions are recorded under Architecture → UI and are not tied to a specific release.
 - `mlx-lm>=0.31.3` — model loading and inference on Apple Silicon; see Known Issues for why the floor is a patch version
 
 Python is floored at `>=3.12` in `pyproject.toml` and pinned to `3.12` by `.python-version`; uv otherwise picks the newest interpreter it can find.
@@ -258,7 +258,7 @@ with sync_playwright() as p:
 
 - **`device_scale_factor=2` is not optional.** The dev machine is a non-retina 1920×1080 display reporting `devicePixelRatio: 1`, so macOS `screencapture` and the Chrome extension's screenshot both yield 1× — half the asset's resolution. Playwright synthesizes 2× regardless of the physical display.
 - **`channel="chrome"` avoids a browser download.** The cached Playwright build drifts from whatever version `uvx`/`--with` resolves (1228 vs 1234 at time of writing), and the mismatch triggers a ~150 MB `playwright install`. Driving the installed Chrome sidesteps it.
-- **Blur *and* move the mouse.** After the click the button keeps focus (focus ring) and the virtual mouse stays parked on it (`:hover` red). Both survive into the still. A correct capture samples `#FF4B4B` on the Translate button and `#0E1117` on the background — Streamlit's default dark values as of 1.61.1, and a cheap way to prove the theme is the built-in one. Those two constants are exactly the kind of hand-transcribed default the Theme section warns about, and nothing tests them: after a Streamlit bump, re-sample rather than trusting them.
+- **Blur *and* move the mouse.** After the click the button keeps focus (focus ring) and the virtual mouse stays parked on it (`:hover` red). Both survive into the still. A correct capture samples `#FF4B4B` on the Translate button and `#0E1117` on the background — Streamlit's default dark values as of 1.63.0, and a cheap way to prove the theme is the built-in one. Those two constants are exactly the kind of hand-transcribed default the Theme section warns about, and nothing tests them: after a Streamlit bump, re-sample rather than trusting them.
 - **Re-measure the height after any layout change.** The viewport height is tuned to end just below the buttons; it is not a stable constant. Dropping the Material theme alone grew the page by ~90 CSS px (its `baseFontSize = 14` against Streamlit's default 16), which silently pushed the buttons out of frame at the old height.
 - **Streamlit commits a `text_area` on blur**, so `fill()` then `Tab`, and wait for the rerun before clicking Translate — clicking too early lands on a stale widget tree.
 

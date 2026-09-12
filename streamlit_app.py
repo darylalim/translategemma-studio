@@ -205,7 +205,6 @@ with left_col:
     # button carries the count — so nothing sits between the text area and
     # Translate, and nothing renders under budget.
     prompt_tokens = 0
-    over_budget = False
     if text.strip():
         # `tokenizer` is already bound from the module-level load above.
         preview = build_prompt(
@@ -216,7 +215,7 @@ with left_col:
             ALL_LANGUAGES[target],
         )
         prompt_tokens = count_prompt_tokens(preview, tokenizer)
-        over_budget = prompt_tokens > MAX_PROMPT_TOKENS
+    over_budget = prompt_tokens > MAX_PROMPT_TOKENS
 
     # Translate directly follows the 300px text area in every state, so it
     # stays level with Download, which directly follows the 300px output box.

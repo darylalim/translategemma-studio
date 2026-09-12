@@ -26,6 +26,12 @@ def _fake_stream(*segments):
     return [SimpleNamespace(text=s) for s in segments]
 
 
+def _is_output_box(child):
+    return (
+        child.type == "flex_container" and child.proto.height_config.pixel_height == 300
+    )
+
+
 def _output_box(app_test):
     # The one fixed-height (300px) container on the page, found structurally
     # so this does not repeat conftest's positional column-order knowledge.
@@ -33,8 +39,7 @@ def _output_box(app_test):
         child
         for column in app_test.columns
         for child in column.children.values()
-        if child.type == "flex_container"
-        and child.proto.height_config.pixel_height == 300
+        if _is_output_box(child)
     ]
     assert len(boxes) == 1, f"expected one 300px output container, found {len(boxes)}"
     return boxes[0]
@@ -47,25 +52,19 @@ def _box_contents(box):
 def _content_columns(app_test):
     # The two content columns, identified by what they hold — the source
     # text_area and the 300px output box — rather than by position.
-    def holds(column, predicate):
-        return any(predicate(child) for child in column.children.values())
-
-    left = next(
-        column
-        for column in app_test.columns
-        if holds(column, lambda child: child.type == "text_area")
-    )
-    right = next(
-        column
-        for column in app_test.columns
-        if holds(
-            column,
-            lambda child: (
-                child.type == "flex_container"
-                and child.proto.height_config.pixel_height == 300
-            ),
+    def holding(predicate, what):
+        columns = [
+            column
+            for column in app_test.columns
+            if any(predicate(child) for child in column.children.values())
+        ]
+        assert len(columns) == 1, (
+            f"expected one column holding {what}, found {len(columns)}"
         )
-    )
+        return columns[0]
+
+    left = holding(lambda child: child.type == "text_area", "the source text_area")
+    right = holding(_is_output_box, "the 300px output box")
     return left, right
 
 
@@ -435,15 +434,16 @@ class TestButtonLayout:
 
     def test_translate_directly_follows_the_text_area(self, app_module):
         calls = _top_level_calls(app_module)
-        text_area = next(i for i, c in enumerate(calls) if c[0] == "text_area")
+        text_area = [c[0] for c in calls].index("text_area")
         name, args, _ = calls[text_area + 1]
         assert (name, args) == ("button", ("Translate",))
 
     def test_download_directly_follows_the_output_box(self, app_module):
-        calls = app_module.st.mock_calls
-        leave = calls.index(call.container().__exit__(None, None, None))
-        after = next(c for c in calls[leave + 1 :] if "." not in c[0])
-        assert after[0] == "download_button"
+        # The box holds exactly one st.empty(), so the top-level call after
+        # it is the first element outside the box.
+        calls = _top_level_calls(app_module)
+        empty = [c[0] for c in calls].index("empty")
+        assert calls[empty + 1][0] == "download_button"
 
     def test_no_spacer_caption(self, app_module):
         # The right column once mirrored the counter with an invisible

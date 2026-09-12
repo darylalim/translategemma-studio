@@ -23,7 +23,7 @@ MODEL_ID = "mlx-community/translategemma-4b-it-8bit"
 # the quant's max_position_embeddings (131072) allows far more.
 CONTEXT_WINDOW = 2048
 MAX_PROMPT_TOKENS = 1024  # prompt cap; leaves >=1024 tokens for the translation
-MAX_INPUT_CHARS = 5000  # coarse backstop; the token counter is the real gate
+MAX_INPUT_CHARS = 5000  # coarse backstop; the token budget is the real gate
 
 
 def build_prompt(
@@ -200,9 +200,10 @@ with left_col:
         label_visibility="collapsed",
     )
 
-    # Live token usage against the prompt cap. Computed here so the button
-    # can be disabled on it; rendered after the button so nothing conditional
-    # sits between the text area and Translate.
+    # Token usage against the prompt cap, computed here so the button can be
+    # disabled on it. Surfaced only when over budget — the badge below the
+    # button carries the count — so nothing sits between the text area and
+    # Translate, and nothing renders under budget.
     prompt_tokens = 0
     over_budget = False
     if text.strip():
@@ -227,14 +228,12 @@ with left_col:
         disabled=over_budget,
     )
 
-    if text.strip():
-        st.caption(f"{prompt_tokens} / {MAX_PROMPT_TOKENS} tokens")
-        if over_budget:
-            st.badge(
-                "Too long to translate",
-                icon=":material/error:",
-                color="red",
-            )
+    if over_budget:
+        st.badge(
+            f"Too long: {prompt_tokens} / {MAX_PROMPT_TOKENS} tokens",
+            icon=":material/error:",
+            color="red",
+        )
 
 prev_response = st.session_state.get("translation_result", "")
 

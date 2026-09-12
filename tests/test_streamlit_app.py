@@ -429,8 +429,9 @@ class TestButtonLayout:
 
     # Each button is the element right after its 300px panel. Anything
     # conditional between a panel and its button moves the button — and,
-    # unless mirrored in the other column, misaligns the pair. The token
-    # counter used to sit there; it renders below Translate now.
+    # unless mirrored in the other column, misaligns the pair. A live token
+    # counter used to sit there; only the over-budget badge renders now,
+    # below Translate.
 
     def test_translate_directly_follows_the_text_area(self, app_module):
         calls = _top_level_calls(app_module)
@@ -451,26 +452,18 @@ class TestButtonLayout:
         assert "&nbsp;" not in _caption_texts(app_module)
 
 
-class TestTokenCounter:
-    def test_token_count_caption_rendered(self, app_module):
-        captions = _caption_texts(app_module)
-        token_budget = f"/ {app_module.MAX_PROMPT_TOKENS} tokens"
-        assert any(token_budget in text for text in captions)
-
-    def test_token_counter_renders_below_the_translate_button(self, app_module):
-        calls = _top_level_calls(app_module)
-        token_budget = f"/ {app_module.MAX_PROMPT_TOKENS} tokens"
-        translate = next(
-            i
-            for i, c in enumerate(calls)
-            if c[0] == "button" and c[1] == ("Translate",)
-        )
-        counter = next(
-            i
-            for i, c in enumerate(calls)
-            if c[0] == "caption" and token_budget in c[1][0]
-        )
-        assert translate < counter
+class TestTokenBudget:
+    def test_nothing_rendered_under_budget(self, app_module):
+        # The import-time tokenizer reports 50 tokens, well under the cap.
+        # The budget surfaces only when exceeded: no live counter caption
+        # ("93 / 1024 tokens" is jargon for a one-sentence input) and no
+        # badge. The over-budget badge is covered in TestStreamingClickPath.
+        # Pin the precondition first, so the negatives cannot pass vacuously:
+        # the budget branch ran and came in under the cap.
+        assert 0 < app_module.prompt_tokens <= app_module.MAX_PROMPT_TOKENS
+        assert app_module.over_budget is False
+        assert not any("tokens" in text for text in _caption_texts(app_module))
+        app_module.st.badge.assert_not_called()
 
 
 class TestOutputBox:
@@ -615,36 +608,38 @@ class TestStreamingClickPath:
 
         assert app_test.button(key="translate_text").disabled is True
         # The over-budget indicator renders as a red badge (a markdown
-        # element) carrying the error icon, not inline caption text.
+        # element) carrying the error icon and the count to trim to — the
+        # only place the number appears; there is no caption counter.
         assert any(
             "red-badge[" in m.value
             and ":material/error:" in m.value
-            and "Too long to translate" in m.value
+            and "Too long: 2000 / 1024 tokens" in m.value
             for m in app_test.markdown
         )
+        assert not any("tokens" in c.value for c in app_test.caption)
 
     def test_buttons_directly_follow_their_panels_in_every_state(
         self, app_test, fake_mlx_lm, mock_tokenizer
     ):
-        # The counter and badge only ever render below Translate, and the
-        # right column has nothing between the box and Download, so the two
-        # buttons sit level in every state. See TestButtonLayout.
+        # Nothing renders under budget, the badge only ever renders below
+        # Translate, and the right column has nothing between the box and
+        # Download, so the two buttons sit level in every state. See
+        # TestButtonLayout.
+        left = ["text_area", "button"]
         right = ["flex_container", "download_button"]
-        assert _column_shapes(app_test) == (["text_area", "button"], right)
+        assert _column_shapes(app_test) == (left, right)  # empty
 
         app_test.text_area(key="source_text").input("Hello").run()
-        under_budget = ["text_area", "button", "caption"]
-        assert _column_shapes(app_test) == (under_budget, right)
+        assert _column_shapes(app_test) == (left, right)  # under budget
 
         fake_mlx_lm.stream_generate.return_value = _fake_stream("Hola")
         app_test.button(key="translate_text").click().run()
         assert app_test.download_button(key="download_text").disabled is False
-        assert _column_shapes(app_test) == (under_budget, right)  # with a result
+        assert _column_shapes(app_test) == (left, right)  # with a result
 
         mock_tokenizer.encode.return_value = list(range(2000))
         app_test.text_area(key="source_text").set_value("text").run()
-        over_budget = [*under_budget, "markdown"]  # the badge
-        assert _column_shapes(app_test) == (over_budget, right)
+        assert _column_shapes(app_test) == ([*left, "markdown"], right)  # badge
 
     def test_translation_exception_logs_and_shows_error(
         self, app_test, fake_mlx_lm, caplog

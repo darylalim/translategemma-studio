@@ -1,3 +1,4 @@
+import re
 import tomllib
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,12 +18,17 @@ def _fake_stream(*segments):
 
 
 def _output_box(app_test):
-    # at.columns lists every column block in order: the [10, 1, 10] selector
-    # row is 0-2, the content row is 3-4; the output box is the first child
-    # of the right content column.
-    box = app_test.columns[4].children[0]
-    assert box.type == "flex_container"
-    return box
+    # The one fixed-height (300px) container on the page, found structurally
+    # so this does not repeat conftest's positional column-order knowledge.
+    boxes = [
+        child
+        for column in app_test.columns
+        for child in column.children.values()
+        if child.type == "flex_container"
+        and child.proto.height_config.pixel_height == 300
+    ]
+    assert len(boxes) == 1, f"expected one 300px output container, found {len(boxes)}"
+    return boxes[0]
 
 
 def _box_contents(box):
@@ -401,10 +407,10 @@ class TestOutputBox:
         # The single st.empty() must be opened inside the container's
         # `with` block — st.empty() called before __enter__ or after __exit__
         # would render the translation outside the bordered box.
-        calls = [str(c) for c in app_module.st.mock_calls]
-        enter = calls.index("call.container().__enter__()")
-        empty = calls.index("call.empty()")
-        leave = next(i for i, c in enumerate(calls) if "container().__exit__" in c)
+        calls = app_module.st.mock_calls
+        enter = calls.index(call.container().__enter__())
+        empty = calls.index(call.empty())
+        leave = calls.index(call.container().__exit__(None, None, None))
         assert enter < empty < leave
         app_module.st.empty.assert_called_once()
 
@@ -500,10 +506,26 @@ class TestStreamingClickPath:
         assert _box_contents(_output_box(app_test)) == [("text", "Hola")]
         assert any("boom" in e.value for e in app_test.error)
 
+    def test_failure_before_first_chunk_restores_the_settled_box(
+        self, app_test, fake_mlx_lm
+    ):
+        # A previous result is on screen and Download offers it; a second
+        # translation that dies before streaming anything must not leave
+        # "Translating…" (or nothing) in the box.
+        fake_mlx_lm.stream_generate.return_value = _fake_stream("Hola", " ", "mundo")
+        app_test.text_area(key="source_text").input("Hello").run()
+        app_test.button(key="translate_text").click().run()
+        assert _box_contents(_output_box(app_test)) == [("text", "Hola mundo")]
+
+        fake_mlx_lm.stream_generate.side_effect = RuntimeError("boom")
+        app_test.button(key="translate_text").click().run()
+
+        assert _box_contents(_output_box(app_test)) == [("text", "Hola mundo")]
+        assert any("boom" in e.value for e in app_test.error)
+        assert app_test.download_button(key="download_text").disabled is False
+
     def test_empty_output_box_shows_placeholder_caption(self, app_test):
-        box = _output_box(app_test)
-        assert box.proto.height_config.pixel_height == 300
-        assert _box_contents(box) == [("caption", "Translation")]
+        assert _box_contents(_output_box(app_test)) == [("caption", "Translation")]
         assert not app_test.text
         assert app_test.download_button(key="download_text").disabled is True
 
@@ -609,16 +631,16 @@ class TestThemeConfig:
     config_path = Path(__file__).parent.parent / ".streamlit" / "config.toml"
 
     def _theme(self) -> dict:
-        theme = tomllib.loads(self.config_path.read_text()).get("theme")
-        assert isinstance(theme, dict), f"{self.config_path} has no [theme] table"
-        return theme
-
-    def test_config_parses_with_a_theme_table(self):
         assert self.config_path.exists(), (
             f"{self.config_path} must exist — the app ships a custom theme. "
             "See CLAUDE.md → Architecture → Theme."
         )
-        assert isinstance(self._theme(), dict)
+        theme = tomllib.loads(self.config_path.read_text()).get("theme")
+        assert isinstance(theme, dict), f"{self.config_path} has no [theme] table"
+        return theme
+
+    def test_config_exists_and_has_a_theme_table(self):
+        self._theme()
 
     def test_both_mode_sections_are_defined(self):
         theme = self._theme()
@@ -648,3 +670,24 @@ class TestThemeConfig:
             f"Not Streamlit config options: {unknown}. `base` is only valid "
             "directly under [theme], never inside [theme.light]/[theme.dark]."
         )
+
+    def test_every_colour_value_is_six_digit_hex(self):
+        # The frontend drops a malformed colour with only a console warning
+        # and paints the stock palette instead — the theme's whole purpose,
+        # silently undone. Streamlit accepts other formats; this file uses
+        # six-digit hex throughout, so anything else here is a typo.
+        def colours(table: dict) -> list[tuple[str, object]]:
+            found = []
+            for name, value in table.items():
+                if isinstance(value, dict):
+                    found.extend(colours(value))
+                elif name.endswith("Color"):
+                    found.append((name, value))
+            return found
+
+        bad = [
+            (name, value)
+            for name, value in colours(self._theme())
+            if not (isinstance(value, str) and re.fullmatch(r"#[0-9A-Fa-f]{6}", value))
+        ]
+        assert not bad, f"Colour values that are not #RRGGBB: {bad}"

@@ -4,6 +4,7 @@ from typing import Any
 
 import streamlit as st
 from mlx_lm import generate, load, stream_generate
+from streamlit.delta_generator import DeltaGenerator
 
 from languages import (
     ALL_LANGUAGES,
@@ -148,6 +149,14 @@ def _swap_languages() -> None:
         state["source_text"] = state.pop("translation_result")
 
 
+def _show_settled(box: DeltaGenerator, result: str) -> None:
+    # The output box at rest: the last translation, or a muted placeholder.
+    if result:
+        box.text(result)
+    else:
+        box.caption("Translation")
+
+
 # --- Language selectors ---
 col1, col_swap, col2 = st.columns([10, 1, 10], vertical_alignment="center")
 source = col1.selectbox(
@@ -226,14 +235,10 @@ with right_col:
     # One bordered, fixed-height box holds the translation in every state.
     # The settled result is st.text — the same element streaming writes
     # through — rather than a disabled text area, which Streamlit paints at
-    # 40% alpha. Whatever is here stays until the first streamed chunk
-    # replaces it, and stays put beside the st.error if generation fails.
+    # 40% alpha.
     with st.container(height=300):
         output_box = st.empty()
-        if prev_response:
-            output_box.text(prev_response)
-        else:
-            output_box.caption("Translation")  # placeholder-style hint
+        _show_settled(output_box, prev_response)
 
     if text.strip():
         st.caption("&nbsp;")  # spacer matching the left column's token counter
@@ -253,10 +258,11 @@ if translate_clicked:
     if not text.strip():
         st.warning("Please enter text to translate.", icon=":material/warning:")
     else:
+        # Stream into the output box as the model generates; the rerun then
+        # re-renders it settled and enables Download.
+        chunks: list[str] = []
         try:
-            # Stream into the output box as the model generates; the rerun
-            # then re-renders it settled and enables Download.
-            chunks: list[str] = []
+            output_box.caption("Translating…")  # covers the prefill wait
             for chunk in translate_stream(
                 text,
                 source,
@@ -271,3 +277,7 @@ if translate_clicked:
         except Exception as e:
             logger.exception("Translation failed")
             st.error(f"Translation failed: {e}", icon=":material/error:")
+            if not chunks:
+                # Nothing streamed: put the box back to match what Download
+                # still offers. A partial stream is left in place.
+                _show_settled(output_box, prev_response)

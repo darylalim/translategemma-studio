@@ -24,6 +24,22 @@ MODEL_ID = "mlx-community/translategemma-4b-it-8bit"
 CONTEXT_WINDOW = 2048
 MAX_PROMPT_TOKENS = 1024  # prompt cap; leaves >=1024 tokens for the translation
 MAX_INPUT_CHARS = 5000  # coarse backstop; the token budget is the real gate
+# The page renders inside one centred column of this width (see "Page
+# column" below), so the two panels are 592px each from ~1360 wide up and a
+# line of 16px output holds ~75 characters, the top of the readable range.
+# Measured: 1300 gives 80-81 (text area 91-97); 1100 gives 542px panels at
+# 67 / 76. A narrower window clamps the column to the page.
+PAGE_WIDTH = 1200
+# One height for the text area and the output box, so their bottoms — and
+# the two buttons directly below them — sit level. The offsets below are
+# measured on 1.63.0 and independent of the height: the buttons' bottom is
+# at 282 px + this, the over-budget badge ends 42 px lower, and a
+# "Translation failed" st.error row 74 px lower still. 400 fits every state
+# on a 1440x900 display (error row at 756) and shows ~14 lines of output; a
+# 680 px laptop viewport needs <=320 for every state, <=350 for buttons and
+# badge. Stay at or under 500, the st.container docstring's ceiling for
+# scrolling containers. Re-measure before changing it.
+PANEL_HEIGHT = 400
 
 
 def build_prompt(
@@ -120,23 +136,6 @@ def translate_stream(
         yield response.text
 
 
-st.set_page_config(page_title=APP_TITLE, page_icon=":material/translate:")
-st.title(APP_TITLE)
-
-# --- Session state defaults ---
-st.session_state.setdefault("source_lang", "English")
-st.session_state.setdefault("target_lang", "Spanish")
-
-# --- Model loading ---
-try:
-    with st.spinner("Loading model..."):
-        _, tokenizer = load_model()
-except Exception as e:
-    logger.exception("Failed to load model")
-    st.error(f"Failed to load model: {e}", icon=":material/error:")
-    st.stop()
-
-
 def _swap_languages() -> None:
     state = st.session_state
     if state["target_lang"] in FROM_ENGLISH_ONLY:
@@ -157,130 +156,161 @@ def _show_settled(box: DeltaGenerator, result: str) -> None:
         box.caption("Translation")
 
 
-# --- Language selectors ---
-col1, col_swap, col2 = st.columns([10, 1, 10], vertical_alignment="center")
-source = col1.selectbox(
-    "Source language",
-    SOURCE_LANGS,
-    key="source_lang",
-    label_visibility="collapsed",
+st.set_page_config(
+    page_title=APP_TITLE, page_icon=":material/translate:", layout="wide"
 )
 
-valid_targets = TARGET_LANGS_FOR_ENGLISH if source == "English" else ["English"]
-if st.session_state["target_lang"] not in valid_targets:
-    st.session_state["target_lang"] = valid_targets[0]
+# --- Page column ---
+# "wide" lifts the centred layout's 736px cap; the page renders inside one
+# centred PAGE_WIDTH column instead, which keeps the readable-width cap the
+# centred layout used to provide. Two containers because the cap and the
+# centring are separate: a fixed-width child sits at the left edge of its
+# parent unless the parent centres its elements. Everything below must stay
+# inside this block — anything rendered outside it is full-bleed under
+# "wide".
+with st.container(horizontal_alignment="center"), st.container(width=PAGE_WIDTH):
+    st.title(APP_TITLE)
 
-target = col2.selectbox(
-    "Target language",
-    valid_targets,
-    key="target_lang",
-    label_visibility="collapsed",
-)
+    # --- Session state defaults ---
+    st.session_state.setdefault("source_lang", "English")
+    st.session_state.setdefault("target_lang", "Spanish")
 
-with col_swap:
-    can_swap = st.session_state["target_lang"] not in FROM_ENGLISH_ONLY
-    st.button(
-        ":material/swap_horiz:",
-        type="tertiary",
-        width="stretch",
-        on_click=_swap_languages,
-        help="Swap languages",
-        disabled=not can_swap,
-    )
+    # --- Model loading ---
+    try:
+        with st.spinner("Loading model..."):
+            _, tokenizer = load_model()
+    except Exception as e:
+        logger.exception("Failed to load model")
+        st.error(f"Failed to load model: {e}", icon=":material/error:")
+        st.stop()
 
-# --- Text areas and buttons ---
-left_col, right_col = st.columns(2)
-
-with left_col:
-    text = st.text_area(
-        "Source text",
-        height=300,
-        max_chars=MAX_INPUT_CHARS,
-        key="source_text",
+    # --- Language selectors ---
+    col1, col_swap, col2 = st.columns([10, 1, 10], vertical_alignment="center")
+    source = col1.selectbox(
+        "Source language",
+        SOURCE_LANGS,
+        key="source_lang",
         label_visibility="collapsed",
     )
 
-    # Token usage against the prompt cap, computed here so the button can be
-    # disabled on it. Surfaced only when over budget — the badge below the
-    # button carries the count — so nothing sits between the text area and
-    # Translate, and nothing renders under budget.
-    prompt_tokens = 0
-    if text.strip():
-        # `tokenizer` is already bound from the module-level load above.
-        preview = build_prompt(
-            text,
-            source,
-            ALL_LANGUAGES[source],
-            target,
-            ALL_LANGUAGES[target],
-        )
-        prompt_tokens = count_prompt_tokens(preview, tokenizer)
-    over_budget = prompt_tokens > MAX_PROMPT_TOKENS
+    valid_targets = TARGET_LANGS_FOR_ENGLISH if source == "English" else ["English"]
+    if st.session_state["target_lang"] not in valid_targets:
+        st.session_state["target_lang"] = valid_targets[0]
 
-    # Translate directly follows the 300px text area in every state, so it
-    # stays level with Download, which directly follows the 300px output box.
-    translate_clicked = st.button(
-        "Translate",
-        type="primary",
-        key="translate_text",
-        width="stretch",
-        disabled=over_budget,
+    target = col2.selectbox(
+        "Target language",
+        valid_targets,
+        key="target_lang",
+        label_visibility="collapsed",
     )
 
-    if over_budget:
-        st.badge(
-            f"Too long: {prompt_tokens} / {MAX_PROMPT_TOKENS} tokens",
-            icon=":material/error:",
-            color="red",
+    with col_swap:
+        can_swap = st.session_state["target_lang"] not in FROM_ENGLISH_ONLY
+        st.button(
+            ":material/swap_horiz:",
+            type="tertiary",
+            width="stretch",
+            on_click=_swap_languages,
+            help="Swap languages",
+            disabled=not can_swap,
         )
 
-prev_response = st.session_state.get("translation_result", "")
+    # --- Text areas and buttons ---
+    left_col, right_col = st.columns(2)
 
-with right_col:
-    # One bordered, fixed-height box holds the translation in every state.
-    # The settled result is st.text — the same element streaming writes
-    # through — rather than a disabled text area, which Streamlit paints at
-    # 40% alpha.
-    with st.container(height=300):
-        output_box = st.empty()
-        _show_settled(output_box, prev_response)
+    with left_col:
+        text = st.text_area(
+            "Source text",
+            height=PANEL_HEIGHT,
+            max_chars=MAX_INPUT_CHARS,
+            key="source_text",
+            label_visibility="collapsed",
+        )
 
-    # Nothing between the box and Download — see the left column.
-    st.download_button(
-        label="Download",
-        type="secondary",
-        data=prev_response if prev_response else "",
-        file_name="translation.txt",
-        mime="text/plain",
-        key="download_text",
-        disabled=not prev_response,
-        width="stretch",
-    )
-
-if translate_clicked:
-    if not text.strip():
-        st.warning("Please enter text to translate.", icon=":material/warning:")
-    else:
-        # Stream into the output box as the model generates; the rerun then
-        # re-renders it settled and enables Download.
-        chunks: list[str] = []
-        try:
-            output_box.caption("Translating…")  # covers the prefill wait
-            for chunk in translate_stream(
+        # Token usage against the prompt cap, computed here so the button can be
+        # disabled on it. Surfaced only when over budget — the badge below the
+        # button carries the count — so nothing sits between the text area and
+        # Translate, and nothing renders under budget.
+        prompt_tokens = 0
+        if text.strip():
+            # `tokenizer` is already bound from the module-level load above.
+            preview = build_prompt(
                 text,
                 source,
                 ALL_LANGUAGES[source],
                 target,
                 ALL_LANGUAGES[target],
-            ):
-                chunks.append(chunk)
-                output_box.text("".join(chunks))
-            st.session_state["translation_result"] = _strip_eos_token("".join(chunks))
-            st.rerun()
-        except Exception as e:
-            logger.exception("Translation failed")
-            st.error(f"Translation failed: {e}", icon=":material/error:")
-            if not chunks:
-                # Nothing streamed: put the box back to match what Download
-                # still offers. A partial stream is left in place.
-                _show_settled(output_box, prev_response)
+            )
+            prompt_tokens = count_prompt_tokens(preview, tokenizer)
+        over_budget = prompt_tokens > MAX_PROMPT_TOKENS
+
+        # Translate directly follows the PANEL_HEIGHT text area in every state,
+        # so it stays level with Download, which directly follows the
+        # PANEL_HEIGHT output box.
+        translate_clicked = st.button(
+            "Translate",
+            type="primary",
+            key="translate_text",
+            width="stretch",
+            disabled=over_budget,
+        )
+
+        if over_budget:
+            st.badge(
+                f"Too long: {prompt_tokens} / {MAX_PROMPT_TOKENS} tokens",
+                icon=":material/error:",
+                color="red",
+            )
+
+    prev_response = st.session_state.get("translation_result", "")
+
+    with right_col:
+        # One bordered, fixed-height box holds the translation in every state.
+        # The settled result is st.text — the same element streaming writes
+        # through — rather than a disabled text area, which Streamlit paints at
+        # 40% alpha.
+        with st.container(height=PANEL_HEIGHT):
+            output_box = st.empty()
+            _show_settled(output_box, prev_response)
+
+        # Nothing between the box and Download — see the left column.
+        st.download_button(
+            label="Download",
+            type="secondary",
+            data=prev_response if prev_response else "",
+            file_name="translation.txt",
+            mime="text/plain",
+            key="download_text",
+            disabled=not prev_response,
+            width="stretch",
+        )
+
+    if translate_clicked:
+        if not text.strip():
+            st.warning("Please enter text to translate.", icon=":material/warning:")
+        else:
+            # Stream into the output box as the model generates; the rerun then
+            # re-renders it settled and enables Download.
+            chunks: list[str] = []
+            try:
+                output_box.caption("Translating…")  # covers the prefill wait
+                for chunk in translate_stream(
+                    text,
+                    source,
+                    ALL_LANGUAGES[source],
+                    target,
+                    ALL_LANGUAGES[target],
+                ):
+                    chunks.append(chunk)
+                    output_box.text("".join(chunks))
+                st.session_state["translation_result"] = _strip_eos_token(
+                    "".join(chunks)
+                )
+                st.rerun()
+            except Exception as e:
+                logger.exception("Translation failed")
+                st.error(f"Translation failed: {e}", icon=":material/error:")
+                if not chunks:
+                    # Nothing streamed: put the box back to match what Download
+                    # still offers. A partial stream is left in place.
+                    _show_settled(output_box, prev_response)

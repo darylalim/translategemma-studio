@@ -6,6 +6,11 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
+# The app's PANEL_HEIGHT, repeated here because the AppTest helpers cannot
+# import streamlit_app (importing it runs the script against the real model);
+# TestConstants.test_panel_height_matches_the_apptest_helper ties the two.
+PANEL_HEIGHT = 400
+
 
 def _caption_texts(app_module):
     return [c.args[0] for c in app_module.st.caption.call_args_list if c.args]
@@ -28,12 +33,13 @@ def _fake_stream(*segments):
 
 def _is_output_box(child):
     return (
-        child.type == "flex_container" and child.proto.height_config.pixel_height == 300
+        child.type == "flex_container"
+        and child.proto.height_config.pixel_height == PANEL_HEIGHT
     )
 
 
 def _output_box(app_test):
-    # The one fixed-height (300px) container on the page, found structurally
+    # The one fixed-height (PANEL_HEIGHT) container on the page, found structurally
     # so this does not repeat conftest's positional column-order knowledge.
     boxes = [
         child
@@ -41,7 +47,9 @@ def _output_box(app_test):
         for child in column.children.values()
         if _is_output_box(child)
     ]
-    assert len(boxes) == 1, f"expected one 300px output container, found {len(boxes)}"
+    assert len(boxes) == 1, (
+        f"expected one {PANEL_HEIGHT}px output container, found {len(boxes)}"
+    )
     return boxes[0]
 
 
@@ -51,7 +59,7 @@ def _box_contents(box):
 
 def _content_columns(app_test):
     # The two content columns, identified by what they hold — the source
-    # text_area and the 300px output box — rather than by position.
+    # text_area and the PANEL_HEIGHT output box — rather than by position.
     def holding(predicate, what):
         columns = [
             column
@@ -64,7 +72,7 @@ def _content_columns(app_test):
         return columns[0]
 
     left = holding(lambda child: child.type == "text_area", "the source text_area")
-    right = holding(_is_output_box, "the 300px output box")
+    right = holding(_is_output_box, f"the {PANEL_HEIGHT}px output box")
     return left, right
 
 
@@ -88,6 +96,17 @@ class TestConstants:
 
     def test_max_input_chars(self, app_module):
         assert app_module.MAX_INPUT_CHARS == 5000
+
+    def test_panel_height_matches_the_apptest_helper(self, app_module):
+        # Ties this module's PANEL_HEIGHT literal to the app's constant.
+        assert app_module.PANEL_HEIGHT == PANEL_HEIGHT
+
+    def test_panel_height_under_the_scrolling_container_ceiling(self, app_module):
+        # st.container's docstring: avoid scrolling heights over 500 pixels.
+        assert app_module.PANEL_HEIGHT <= 500
+
+    def test_page_width(self, app_module):
+        assert app_module.PAGE_WIDTH == 1200
 
     def test_prompt_budget_leaves_room_for_output(self, app_module):
         # The prompt cap must leave room within the context window
@@ -403,11 +422,22 @@ class TestHeader:
         kwargs = app_module.st.set_page_config.call_args.kwargs
         assert kwargs["page_icon"] == ":material/translate:"
 
-    def test_page_layout_is_centered(self, app_module):
-        # Layout must stay centered (default or explicit); guards against an
-        # accidental switch to wide.
+    def test_page_layout_is_wide(self, app_module):
+        # Layout must stay wide: the readable-width cap moved from the
+        # centered layout to the PAGE_WIDTH page column, and dropping this
+        # kwarg would silently restore the 736px page.
         kwargs = app_module.st.set_page_config.call_args.kwargs
-        assert kwargs.get("layout") in (None, "centered")
+        assert kwargs.get("layout") == "wide"
+
+    def test_page_column_wraps_the_ui(self, app_module):
+        # Both page-column containers are opened before the first element,
+        # so everything renders inside the centred column; anything outside
+        # it is full-bleed under wide.
+        calls = app_module.st.mock_calls
+        outer = calls.index(call.container(horizontal_alignment="center"))
+        inner = calls.index(call.container(width=app_module.PAGE_WIDTH))
+        title = calls.index(call.title(app_module.APP_TITLE))
+        assert outer < inner < title
 
     def test_title(self, app_module):
         app_module.st.title.assert_called_once_with("TranslateGemma Studio")
@@ -426,7 +456,7 @@ class TestButtonLayout:
         calls = app_module.st.columns.call_args_list
         assert calls[1] == call(2)
 
-    # Each button is the element right after its 300px panel. Anything
+    # Each button is the element right after its PANEL_HEIGHT panel. Anything
     # conditional between a panel and its button moves the button — and,
     # unless mirrored in the other column, misaligns the pair. A live token
     # counter used to sit there; only the over-budget badge renders now,
@@ -444,6 +474,13 @@ class TestButtonLayout:
         calls = _top_level_calls(app_module)
         empty = [c[0] for c in calls].index("empty")
         assert calls[empty + 1][0] == "download_button"
+
+    def test_panels_share_one_height(self, app_module):
+        # Hard rule: the text area and the output box read the same height,
+        # so their bottoms — and the two buttons below them — sit level.
+        text_area_height = app_module.st.text_area.call_args.kwargs["height"]
+        box_height = app_module.st.container.call_args_list[-1].kwargs["height"]
+        assert text_area_height == box_height == app_module.PANEL_HEIGHT
 
     def test_no_spacer_caption(self, app_module):
         # The right column once mirrored the counter with an invisible
@@ -467,20 +504,27 @@ class TestTokenBudget:
 
 
 class TestOutputBox:
-    def test_output_box_is_a_fixed_height_container(self, app_module):
-        # The translation lives in one bordered, fixed-height container in
-        # every state; height=300 matches the source text_area.
-        app_module.st.container.assert_called_once_with(height=300)
+    def test_output_box_is_the_only_fixed_height_container(self, app_module):
+        # st.container is called three times: the two page-column wrappers,
+        # then the one bordered, fixed-height output box (PANEL_HEIGHT, the
+        # same as the source text_area).
+        assert app_module.st.container.call_args_list == [
+            call(horizontal_alignment="center"),
+            call(width=app_module.PAGE_WIDTH),
+            call(height=app_module.PANEL_HEIGHT),
+        ]
 
     def test_st_empty_is_created_inside_the_container(self, app_module):
-        # The single st.empty() must be opened inside the container's
+        # The single st.empty() must be opened inside the output box's
         # `with` block — st.empty() called before __enter__ or after __exit__
-        # would render the translation outside the bordered box.
+        # would render the translation outside the bordered box. Index from
+        # the box's own call: the page column's __enter__ comes first.
         calls = app_module.st.mock_calls
-        enter = calls.index(call.container().__enter__())
+        box = calls.index(call.container(height=app_module.PANEL_HEIGHT))
+        assert calls[box + 1] == call.container().__enter__()
         empty = calls.index(call.empty())
-        leave = calls.index(call.container().__exit__(None, None, None))
-        assert enter < empty < leave
+        leave = calls.index(call.container().__exit__(None, None, None), box)
+        assert box < empty < leave
         app_module.st.empty.assert_called_once()
 
     def test_empty_state_shows_placeholder_caption_not_text(self, app_module):
@@ -592,6 +636,12 @@ class TestStreamingClickPath:
         assert _box_contents(_output_box(app_test)) == [("text", "Hola mundo")]
         assert any("boom" in e.value for e in app_test.error)
         assert app_test.download_button(key="download_text").disabled is False
+
+    def test_page_column_is_the_main_blocks_only_child(self, app_test):
+        # Everything renders inside the centred page column; a top-level
+        # st.* call outside the with block would appear here as a sibling
+        # and render full-bleed under wide.
+        assert [c.type for c in app_test.main.children.values()] == ["flex_container"]
 
     def test_empty_output_box_shows_placeholder_caption(self, app_test):
         assert _box_contents(_output_box(app_test)) == [("caption", "Translation")]

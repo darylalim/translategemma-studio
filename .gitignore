@@ -1,10 +1,10 @@
 # Secrets
 .env
 
-# Streamlit — ignore secrets and everything else under .streamlit/.
-# There is deliberately no config.toml: the app uses Streamlit's built-in
-# light/dark themes (see CLAUDE.md → Architecture → Theme). The negation stays
-# so that if one is ever added back it is tracked, not silently ignored.
+# Streamlit — ignore secrets and everything else under .streamlit/, but track
+# config.toml: it carries the app's light/dark theme (see CLAUDE.md →
+# Architecture → Theme), so a local edit to it shows up in git status rather
+# than being silently ignored.
 .streamlit/*
 !.streamlit/config.toml
 

@@ -1,3 +1,4 @@
+import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
@@ -531,26 +532,62 @@ class TestStreamingClickPath:
         assert app_test.session_state["target_lang"] == "English"
 
 
-class TestThemeConfigAbsent:
-    """Guard the *absence* of .streamlit/config.toml.
+class TestThemeConfig:
+    """Guard the shape of .streamlit/config.toml, not its colours.
 
-    The app ships Streamlit's built-in light and dark themes, and declaring
-    no theme is the only way to get them — the defaults live in the frontend
-    bundle, not in any value that can be written to config.toml. A partial
-    ``[theme]`` block is worse than none: without both ``[theme.light]`` and
-    ``[theme.dark]`` Streamlit locks the app to a single mode and drops the
-    in-app switcher that README lists as a feature.
+    The app ships a custom theme with both ``[theme.light]`` and
+    ``[theme.dark]`` designed. Streamlit keeps the in-app switcher with
+    either section alone, but the mode that has no section silently falls
+    back to the stock palette under the shared ``[theme]`` font, radius and
+    borders — a half-designed mode, with every other check green.
+    ``.gitignore`` un-ignores exactly this path, so a stray local edit
+    commits by default.
 
-    Nothing else catches this. ``.gitignore`` un-ignores exactly this path,
-    so a config.toml added locally — to avoid the ``--theme.base dark`` flag
-    in the screenshot recipe, say — is committed by default and every other
-    check stays green.
+    The option-name check is the other trap turned into a test: ``base``
+    is a top-level ``[theme]`` key only, and Streamlit logs an unknown key
+    inside a mode section once at startup rather than failing, so a
+    misplaced ``base`` or a typo would otherwise be caught by nobody.
     """
 
-    def test_no_custom_theme_config(self):
-        config_path = Path(__file__).parent.parent / ".streamlit" / "config.toml"
+    config_path = Path(__file__).parent.parent / ".streamlit" / "config.toml"
 
-        assert not config_path.exists(), (
-            f"{config_path} must not exist — the app uses Streamlit's built-in "
-            "light and dark themes. See CLAUDE.md → Architecture → Theme."
+    def _theme(self) -> dict:
+        theme = tomllib.loads(self.config_path.read_text()).get("theme")
+        assert isinstance(theme, dict), f"{self.config_path} has no [theme] table"
+        return theme
+
+    def test_config_parses_with_a_theme_table(self):
+        assert self.config_path.exists(), (
+            f"{self.config_path} must exist — the app ships a custom theme. "
+            "See CLAUDE.md → Architecture → Theme."
+        )
+        assert isinstance(self._theme(), dict)
+
+    def test_both_mode_sections_are_defined(self):
+        theme = self._theme()
+        for mode in ("light", "dark"):
+            assert theme.get(mode), (
+                f"[theme.{mode}] is missing or empty — that mode would fall "
+                "back to Streamlit's stock palette under the shared [theme] "
+                "keys. Both modes are designed on purpose."
+            )
+
+    def test_every_key_is_a_registered_streamlit_option(self):
+        import streamlit.config
+
+        registered = streamlit.config.get_config_options()
+
+        def dotted(table: dict, prefix: str) -> list[str]:
+            keys = []
+            for name, value in table.items():
+                if isinstance(value, dict):
+                    keys.extend(dotted(value, f"{prefix}.{name}"))
+                else:
+                    keys.append(f"{prefix}.{name}")
+            return keys
+
+        unknown = [k for k in dotted(self._theme(), "theme") if k not in registered]
+        assert not unknown, (
+            f"Not Streamlit config options: {unknown}. `base` is only valid "
+            "directly under [theme], never inside [theme.light]/[theme.dark]."
         )

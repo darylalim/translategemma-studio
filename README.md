@@ -18,7 +18,7 @@ Translate text between 295 languages entirely on your Mac — no cloud, no API k
 - **Token counter** — live input usage against the model's context window, with translation blocked when the input is over budget
 - **Swap languages** — swap source and target languages, moving translation output to source input
 - **Download as text** — download translation output as a `.txt` file
-- **Light and dark mode** — Streamlit's built-in light and dark themes, with an in-app theme switcher
+- **Light and dark mode** — a paired light/dark theme with a native Mac look, with an in-app theme switcher
 
 ## Supported Languages
 

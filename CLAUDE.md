@@ -36,7 +36,7 @@ Each of these is explained in full further down; they are collected here because
 - **`tokenizer.apply_chat_template`** — the prompt is built as a raw string on purpose. See Known Issues.
 - **`Stop` hooks** — two existed and were removed deliberately. See Hooks.
 - **`use_container_width`** — deprecated by Streamlit; use `width="stretch"`.
-- **A `[theme]` block in `.streamlit/config.toml`** — the app deliberately ships none. A partial one (fonts or radii alone) still counts as a custom theme and locks the app to a single mode. See Architecture → Theme.
+- **`[theme.light]` and `[theme.dark]` in `.streamlit/config.toml`** — both must stay, each non-empty. Streamlit keeps the in-app switcher with either one, but the mode that is missing silently becomes the stock palette under this theme's font, radius and borders — a half-designed mode. And `base` is valid only directly under `[theme]`, never inside a mode section. `TestThemeConfig` fails on either. See Architecture → Theme.
 - **The target-language filter's position** — it must stay above the target selectbox. See Architecture → UI.
 
 ## Code Style
@@ -114,13 +114,21 @@ The module configures `logging.basicConfig(INFO)` (silencing `httpx` to `WARNING
 
 ### Theme
 
-**There is no `.streamlit/config.toml`, and that is the theme.** The app uses Streamlit's built-in light and dark themes, with the stock Appearance switcher (Light / Dark / System) in the settings menu.
+`.streamlit/config.toml` is the "Native" theme: system font, macOS window and text-field neutrals, apple.com blue for the one primary button, with both a light and a dark palette. Thirty-five lines of config, no code. The anchor colours are Apple HIG and apple.com constants; the callout text colours, the light yellow and the dark well are tuned from them for contrast, and the comments name the rendering fact each tuned value answers — read the file for the values; what follows is why it exists and what it relies on.
 
-Declaring nothing is the *only* way to get Streamlit's defaults. They are not values you can write down: `config.py` declares `primaryColor`, `backgroundColor`, `textColor` and the rest as option slots with descriptions but **no default values**, and `app_session.py` merely forwards whatever `config.toml` set into the `custom_theme` protobuf. The real defaults live in the frontend bundle. Any `[theme.light]`/`[theme.dark]` palette claiming to be "the Streamlit defaults" is hand-transcribed and will silently drift on the next upgrade.
+It replaced the stock themes on 2026-09-11 for two problems specific to this UI. Stock primary is `#FF4B4B`, the same hue as the red "Too long to translate" badge and every `st.error`, so the call to action and the failure state looked alike — and white on it is only 3.30:1. And the translation is rendered as a `disabled=True` text area, which Streamlit paints as `textColor` at 40% alpha over `secondaryBackgroundColor` (`fadedText40` in the frontend); stock light mode lands at 2.17:1 there. Pure white / pure black ink with the wells sunk just below the page reaches 3.83:1 dark and 2.82:1 light — 0.02 and 0.04 under the ceiling any config can reach (3.85 / ~2.86). **No theme can get the light-mode output panel to 3:1.** The fix is app code — rendering the settled result through the bordered `st.container(height=300)` + `st.text` path the streaming branch already uses (21:1 light, 17:1 dark, and selectable) — and it has not been done.
 
-The trap on the way back: a `[theme]` block is all-or-nothing. Adding one to recover just the typography or the corner radii still makes it a custom theme, and a custom theme without **both** `[theme.light]` and `[theme.dark]` locks the app to a single mode — so the cheap-looking edit is the one that removes the light/dark switcher.
+Facts the file relies on, all verified against Streamlit 1.63.0:
 
-`.gitignore` still ignores `.streamlit/*` while un-ignoring `config.toml`. Nothing matches it today; the rule is left in place so a future config file is tracked by default rather than silently ignored.
+- **Both `[theme.light]` and `[theme.dark]` are present and non-empty by policy, not by Streamlit's rule.** Streamlit builds the Light / Dark / System switcher whenever *either* mode section has a value and hides it only for a `[theme]`-only block. But a mode with no section falls back to the stock palette (`#0E1117` for dark) under the shared `[theme]` font, radius and borders — so both stay designed. Shared typography and shape in `[theme]` are inherited by both.
+- **`base` is only valid directly under `[theme]`.** Inside a mode section it is an unknown option: Streamlit logs it once at startup and ignores it. `TestThemeConfig` checks every key against `streamlit.config.get_config_options()`, which registers `theme.dark.primaryColor` but not `theme.dark.base`.
+- **`--theme.base dark` is ignored once either mode section is non-empty.** The mode follows the browser's `prefers-color-scheme` or the user's switcher choice — which is why the screenshot recipe emulates the colour scheme in Playwright instead of passing a flag.
+- **`st.text` renders in the body font and text colour**, not the code font, so streaming and the settled text area share a face and there are no `codeFont`/`codeTextColor` keys. If a Streamlit bump moves `st.text` back to the code font, streaming turns green and monospace (`codeTextColor` defaults to `greenTextColor`); add `codeTextColor = textColor` then.
+- **`redColor`/`yellowColor` are overridden and `redTextColor`/`yellowTextColor` pinned.** On this theme's `#1C1C1E` window and `#FFFFFF` page the stock callout text clears AA by only 0.02 (dark) and 0.08 (light), so the semantic colours are Apple's; and the text colours are written out rather than left to Streamlit's ±15% lightness derivation — dark red text lifted to 7:1 on its tint, light red text darkened to widen the red/yellow gap under deuteranopia, yellow pinned at exactly the derived value so a change to the derivation cannot move it. The callouts, the red badge and the text area's `max_chars` counter (which blinks `redTextColor` at 5000/5000) are the only things that paint these.
+- **Apple's own system blues fail AA under white text** (`#007AFF` 4.02:1, `#0A84FF` 3.65:1); the apple.com web blues (`#0066CC` / `#0071E3`) are tuned for exactly that and are what the file uses.
+- The stock palettes are still untranscribable — `config.py` declares the colour options with no default values and the real ones live in the frontend bundle — so this file is a full custom theme on purpose, not an attempt to reproduce a default. Do not add a `[theme]` "restoring" a stock value; it would be hand-transcribed and drift.
+
+`.gitignore` ignores `.streamlit/*` and un-ignores `config.toml`, so a local edit to the theme shows in `git status` rather than being silently dropped.
 
 ## Known Issues
 
@@ -153,12 +161,12 @@ The mocked layers cannot catch this: they replace `mlx_lm` with a `MagicMock`, s
 
 ## Testing
 
-Two mocked layers, a plain unit layer, and a config guard, ~1s combined for 86 tests at 100% coverage, plus one opt-in live test that runs against the real model:
+Two mocked layers, a plain unit layer, and a config guard, ~1s combined for 88 tests at 100% coverage, plus one opt-in live test that runs against the real model:
 
 - **Import-time tests** — swap `sys.modules["streamlit"]` and `sys.modules["mlx_lm"]` for `MagicMock`s, import `streamlit_app.py`, then assert on captured `st.*` calls. No Streamlit runtime runs. Covers pure functions, layout, token counting, EOS stripping.
 - **End-to-end tests** (`TestStreamingClickPath`) — drive the real script via `streamlit.testing.v1.AppTest` with only `mlx_lm` mocked. Reaches branches the import-time tests can't: streaming click path, model-load failure, runtime target filtering, swap-button wiring, empty-text warning.
 - **Language-table tests** (`tests/test_languages.py`) — 19 tests across 6 classes, mocking nothing; a bare `from languages import ...` inside each test. Assert the 225 / 70 / 295 / 294 counts, per-code samples (including `Chinese` → `zh-CN`), key non-overlap, code uniqueness, and sort order.
-- **Theme-config guard** (`TestThemeConfigAbsent`) — asserts `.streamlit/config.toml` does *not* exist. The invariant inverted rather than disappeared when the Material theme was dropped, and it is otherwise enforced by prose alone: `.gitignore` un-ignores exactly that path, so a stray config.toml commits by default while every other check stays green.
+- **Theme-config guard** (`TestThemeConfig`) — three tests on the *shape* of `.streamlit/config.toml`, not its colours: it parses with a `[theme]` table; `[theme.light]` and `[theme.dark]` are both present and non-empty (this repo's policy — see Architecture → Theme for why one alone is a trap); and every key under `[theme]` is in `streamlit.config.get_config_options()`, so a `base` inside a mode section or a typo fails here instead of being logged once at startup and ignored (other sections of the file are not walked). It reads the real `streamlit.config` — the import-time mocks are restored before any test runs.
 - **Live-model test** (`tests/test_live_model.py`, `@pytest.mark.live`) — the only test with `mlx_lm` unmocked; drives AppTest against the real 3.9 GB quant and asserts a non-empty, EOS-free translation. **Deselected by default** via `-m "not live"` in `addopts`, so neither `uv run pytest` nor CI touches it.
 
 Because the app catches generation failures and renders `st.error`, the live test asserts on `at.error` as well as `at.exception`; checking only the latter turns a real failure into a downstream `KeyError`.
@@ -204,12 +212,12 @@ To reword a release afterwards, `gh release edit vX.Y.Z --notes "..."` (or the G
 
 ## Screenshots
 
-`assets/screenshot-dark.png` is the README's only image: 2400×1352, a 1200×676 viewport at `device_scale_factor=2`. There is no capture script in the repo — this section is the recipe, because every step of it is a trap.
+`assets/screenshot-dark.png` is the README's only screenshot: 2400×1326, a 1200×663 viewport at `device_scale_factor=2`. There is no capture script in the repo — this section is the recipe, because every step of it is a trap.
 
-Run the app in dark mode with a **CLI flag, never a config file**, since `.streamlit/config.toml` must stay absent (see Architecture → Theme):
+Run the app. Streamlit reads `.streamlit/config.toml` from beside `streamlit_app.py` as well as from the cwd, so any cwd works with a path to the script. Do not pass `--theme.base dark`: with a mode section defined the flag is ignored (see Architecture → Theme), and the mode is chosen by the browser's colour scheme, which Playwright emulates below.
 
 ```sh
-uv run streamlit run streamlit_app.py --server.port 8501 --server.headless true --theme.base dark
+uv run streamlit run streamlit_app.py --server.port 8501 --server.headless true
 ```
 
 Then drive it with Playwright via `uv run --with playwright python`, using `channel="chrome"`:
@@ -231,7 +239,9 @@ document.querySelectorAll(
 with sync_playwright() as p:
     browser = p.chromium.launch(channel="chrome")
     ctx = browser.new_context(
-        viewport={"width": 1200, "height": 676}, device_scale_factor=2
+        viewport={"width": 1200, "height": 663},
+        device_scale_factor=2,
+        color_scheme="dark",  # selects [theme.dark]; --theme.base cannot
     )
     page = ctx.new_page()
     # Both waits must cover the cold model load, not just the selector one.
@@ -260,8 +270,8 @@ with sync_playwright() as p:
 
 - **`device_scale_factor=2` is not optional.** The dev machine is a non-retina 1920×1080 display reporting `devicePixelRatio: 1`, so macOS `screencapture` and the Chrome extension's screenshot both yield 1× — half the asset's resolution. Playwright synthesizes 2× regardless of the physical display.
 - **`channel="chrome"` avoids a browser download.** The cached Playwright build drifts from whatever version `uvx`/`--with` resolves (1228 vs 1234 at time of writing), and the mismatch triggers a ~150 MB `playwright install`. Driving the installed Chrome sidesteps it.
-- **Blur *and* move the mouse.** After the click the button keeps focus (focus ring) and the virtual mouse stays parked on it (`:hover` red). Both survive into the still. A correct capture samples `#FF4B4B` on the Translate button and `#0E1117` on the background — Streamlit's default dark values as of 1.63.0, and a cheap way to prove the theme is the built-in one. Those two constants are exactly the kind of hand-transcribed default the Theme section warns about, and nothing tests them: after a Streamlit bump, re-sample rather than trusting them.
-- **Re-measure the height after any layout change.** The viewport height is tuned to end just below the buttons; it is not a stable constant. Dropping the Material theme alone grew the page by ~90 CSS px (its `baseFontSize = 14` against Streamlit's default 16), which silently pushed the buttons out of frame at the old height.
+- **Blur *and* move the mouse.** After the click the button keeps focus (focus ring) and the virtual mouse stays parked on it (`:hover` darkens the button). Both survive into the still. A correct capture samples `#0071E3` on the Translate button and `#1C1C1E` on the background — the theme's own `[theme.dark]` values, which proves both that the config was picked up and that `color_scheme="dark"` selected the dark palette. A `#FF4B4B` button means the config was not found.
+- **Re-measure the height after any layout change.** The viewport height is tuned to end ~42 CSS px below the buttons; it is not a stable constant. Dropping the Material theme grew the page by ~45 CSS px at the buttons (its `baseFontSize = 14` and 36px title against Streamlit's 16 and 2.75rem), and the Native theme then shrank it by ~14 (a 2rem title against the 2.75rem default), which is why the height went 676 → 663. Measure the buttons' `getBoundingClientRect().bottom` at 1200 wide before trusting the number.
 - **Streamlit commits a `text_area` on blur**, so `fill()` then `Tab`, and wait for the rerun before clicking Translate — clicking too early lands on a stale widget tree.
 
 ## Hooks

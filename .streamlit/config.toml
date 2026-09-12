@@ -1,0 +1,35 @@
+# TranslateGemma Studio — "Native" theme (Streamlit 1.63.0): a Mac utility look.
+# System fonts, macOS window/text-field neutrals, apple.com blue as the CTA.
+# Both [theme.light] and [theme.dark] are defined so each mode is designed:
+# with one missing, that mode falls back to the stock palette under these
+# shared keys. (Either section alone already keeps the in-app switcher.)
+
+[theme]
+# system-ui resolves to SF on macOS; Streamlit appends "Source Sans", sans-serif.
+font = "-apple-system, system-ui"
+headingFontSizes = ["2rem"]  # only h1 (st.title) exists; the 2.75rem default dwarfs a utility
+headingFontWeights = [600]
+baseRadius = "6px"           # macOS control radius
+showWidgetBorder = true      # text areas and selectboxes are border-defined, like NSTextField
+
+[theme.light]
+primaryColor = "#0066CC"             # apple.com link blue; white label 5.57:1
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F5F5F7" # Apple light gray: the text-field wells
+textColor = "#000000"                # pure label: the disabled output is this at 40% alpha (2.82:1; the config ceiling is ~2.86)
+borderColor = "#86868B"              # apple.com gray; >= 3:1 on both page and well
+redColor = "#D70015"                 # HIG increase-contrast red; #FF3B30 fails 4.5:1 once the text is derived
+redTextColor = "#6E000B"             # darker than derived #8A000E: widens the red/yellow gap under deuteranopia
+yellowColor = "#C99A00"              # systemYellow pulled down so the warning text clears 4.5:1
+yellowTextColor = "#7A5E00"          # pinned at the derived value so a derivation change cannot move it
+
+[theme.dark]
+primaryColor = "#0071E3"             # apple.com button blue; white label 4.70:1 (Apple's systemBlue #0A84FF only reaches 3.65)
+backgroundColor = "#1C1C1E"          # systemGray6: the window
+secondaryBackgroundColor = "#141416" # wells darker than the window, like a dark-mode NSTextField
+textColor = "#FFFFFF"                # pure label: the disabled output is this at 40% alpha (3.83:1; the config ceiling is 3.85)
+borderColor = "#6E6E73"              # apple.com gray; >= 3:1 on both window and well
+redColor = "#FF453A"                 # systemRed
+redTextColor = "#FFA39E"             # lighter than derived #FF8B85: 7:1 on the error tint
+yellowColor = "#FFD60A"              # systemYellow
+yellowTextColor = "#FFE357"          # pinned at the derived value so a derivation change cannot move it

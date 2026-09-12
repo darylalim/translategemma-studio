@@ -11,6 +11,15 @@ def _caption_texts(app_module):
     return [c.args[0] for c in app_module.st.caption.call_args_list if c.args]
 
 
+def _top_level_calls(app_module):
+    # Direct st.<name>(...) calls, in order. Calls on returned mocks
+    # (text_area().strip(), container().__enter__()) carry a dot in their
+    # name and are dropped, so adjacency here means "no direct st.* call
+    # between"; writes through a column handle are not recorded here, and the
+    # AppTest walk covers those.
+    return [c for c in app_module.st.mock_calls if "." not in c[0]]
+
+
 def _fake_stream(*segments):
     # Stand in for mlx-lm's stream of GenerationResponse objects; only the
     # .text attribute is read by translate_stream().
@@ -33,6 +42,39 @@ def _output_box(app_test):
 
 def _box_contents(box):
     return [(child.type, child.value) for child in box.children.values()]
+
+
+def _content_columns(app_test):
+    # The two content columns, identified by what they hold — the source
+    # text_area and the 300px output box — rather than by position.
+    def holds(column, predicate):
+        return any(predicate(child) for child in column.children.values())
+
+    left = next(
+        column
+        for column in app_test.columns
+        if holds(column, lambda child: child.type == "text_area")
+    )
+    right = next(
+        column
+        for column in app_test.columns
+        if holds(
+            column,
+            lambda child: (
+                child.type == "flex_container"
+                and child.proto.height_config.pixel_height == 300
+            ),
+        )
+    )
+    return left, right
+
+
+def _column_shapes(app_test):
+    left, right = _content_columns(app_test)
+    return (
+        [child.type for child in left.children.values()],
+        [child.type for child in right.children.values()],
+    )
 
 
 class TestConstants:
@@ -385,6 +427,29 @@ class TestButtonLayout:
         calls = app_module.st.columns.call_args_list
         assert calls[1] == call(2)
 
+    # Each button is the element right after its 300px panel. Anything
+    # conditional between a panel and its button moves the button — and,
+    # unless mirrored in the other column, misaligns the pair. The token
+    # counter used to sit there; it renders below Translate now.
+
+    def test_translate_directly_follows_the_text_area(self, app_module):
+        calls = _top_level_calls(app_module)
+        text_area = next(i for i, c in enumerate(calls) if c[0] == "text_area")
+        name, args, _ = calls[text_area + 1]
+        assert (name, args) == ("button", ("Translate",))
+
+    def test_download_directly_follows_the_output_box(self, app_module):
+        calls = app_module.st.mock_calls
+        leave = calls.index(call.container().__exit__(None, None, None))
+        after = next(c for c in calls[leave + 1 :] if "." not in c[0])
+        assert after[0] == "download_button"
+
+    def test_no_spacer_caption(self, app_module):
+        # The right column once mirrored the counter with an invisible
+        # "&nbsp;" caption to keep the buttons level; with nothing between a
+        # panel and its button on either side there is nothing to mirror.
+        assert "&nbsp;" not in _caption_texts(app_module)
+
 
 class TestTokenCounter:
     def test_token_count_caption_rendered(self, app_module):
@@ -392,9 +457,20 @@ class TestTokenCounter:
         token_budget = f"/ {app_module.MAX_PROMPT_TOKENS} tokens"
         assert any(token_budget in text for text in captions)
 
-    def test_right_column_has_alignment_spacer(self, app_module):
-        captions = _caption_texts(app_module)
-        assert "&nbsp;" in captions
+    def test_token_counter_renders_below_the_translate_button(self, app_module):
+        calls = _top_level_calls(app_module)
+        token_budget = f"/ {app_module.MAX_PROMPT_TOKENS} tokens"
+        translate = next(
+            i
+            for i, c in enumerate(calls)
+            if c[0] == "button" and c[1] == ("Translate",)
+        )
+        counter = next(
+            i
+            for i, c in enumerate(calls)
+            if c[0] == "caption" and token_budget in c[1][0]
+        )
+        assert translate < counter
 
 
 class TestOutputBox:
@@ -458,9 +534,9 @@ class TestStreamingClickPath:
 
     Covers UI branches that import-time MagicMock fixtures can't reach:
     the streaming click path and the settled re-render after it, the
-    output box's contents in each state, the model-load error handler,
-    runtime target-list filtering, the swap button, and the empty-text
-    warning.
+    output box's contents in each state, the button row's shape in each
+    state, the model-load error handler, runtime target-list filtering,
+    the swap button, and the empty-text warning.
     """
 
     def test_translate_click_streams_into_session_state(self, app_test, fake_mlx_lm):
@@ -546,6 +622,29 @@ class TestStreamingClickPath:
             and "Too long to translate" in m.value
             for m in app_test.markdown
         )
+
+    def test_buttons_directly_follow_their_panels_in_every_state(
+        self, app_test, fake_mlx_lm, mock_tokenizer
+    ):
+        # The counter and badge only ever render below Translate, and the
+        # right column has nothing between the box and Download, so the two
+        # buttons sit level in every state. See TestButtonLayout.
+        right = ["flex_container", "download_button"]
+        assert _column_shapes(app_test) == (["text_area", "button"], right)
+
+        app_test.text_area(key="source_text").input("Hello").run()
+        under_budget = ["text_area", "button", "caption"]
+        assert _column_shapes(app_test) == (under_budget, right)
+
+        fake_mlx_lm.stream_generate.return_value = _fake_stream("Hola")
+        app_test.button(key="translate_text").click().run()
+        assert app_test.download_button(key="download_text").disabled is False
+        assert _column_shapes(app_test) == (under_budget, right)  # with a result
+
+        mock_tokenizer.encode.return_value = list(range(2000))
+        app_test.text_area(key="source_text").set_value("text").run()
+        over_budget = [*under_budget, "markdown"]  # the badge
+        assert _column_shapes(app_test) == (over_budget, right)
 
     def test_translation_exception_logs_and_shows_error(
         self, app_test, fake_mlx_lm, caplog

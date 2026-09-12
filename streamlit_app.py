@@ -200,7 +200,10 @@ with left_col:
         label_visibility="collapsed",
     )
 
-    # Live token usage against the model's context window.
+    # Live token usage against the prompt cap. Computed here so the button
+    # can be disabled on it; rendered after the button so nothing conditional
+    # sits between the text area and Translate.
+    prompt_tokens = 0
     over_budget = False
     if text.strip():
         # `tokenizer` is already bound from the module-level load above.
@@ -213,14 +216,9 @@ with left_col:
         )
         prompt_tokens = count_prompt_tokens(preview, tokenizer)
         over_budget = prompt_tokens > MAX_PROMPT_TOKENS
-        st.caption(f"{prompt_tokens} / {MAX_PROMPT_TOKENS} tokens")
-        if over_budget:
-            st.badge(
-                "Too long to translate",
-                icon=":material/error:",
-                color="red",
-            )
 
+    # Translate directly follows the 300px text area in every state, so it
+    # stays level with Download, which directly follows the 300px output box.
     translate_clicked = st.button(
         "Translate",
         type="primary",
@@ -228,6 +226,15 @@ with left_col:
         width="stretch",
         disabled=over_budget,
     )
+
+    if text.strip():
+        st.caption(f"{prompt_tokens} / {MAX_PROMPT_TOKENS} tokens")
+        if over_budget:
+            st.badge(
+                "Too long to translate",
+                icon=":material/error:",
+                color="red",
+            )
 
 prev_response = st.session_state.get("translation_result", "")
 
@@ -240,9 +247,7 @@ with right_col:
         output_box = st.empty()
         _show_settled(output_box, prev_response)
 
-    if text.strip():
-        st.caption("&nbsp;")  # spacer matching the left column's token counter
-
+    # Nothing between the box and Download — see the left column.
     st.download_button(
         label="Download",
         type="secondary",

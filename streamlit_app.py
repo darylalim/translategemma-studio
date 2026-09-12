@@ -221,22 +221,19 @@ with left_col:
     )
 
 prev_response = st.session_state.get("translation_result", "")
-streaming = translate_clicked and bool(text.strip())
 
 with right_col:
-    # A placeholder so the same slot can hold either the streamed output
-    # (during generation) or the settled translation (every other run).
-    output_slot = st.empty()
-    if not streaming:
-        st.session_state["text_output"] = prev_response
-        output_slot.text_area(
-            "Translation output",
-            placeholder="Translation",
-            disabled=True,
-            height=300,
-            label_visibility="collapsed",
-            key="text_output",
-        )
+    # One bordered, fixed-height box holds the translation in every state.
+    # The settled result is st.text — the same element streaming writes
+    # through — rather than a disabled text area, which Streamlit paints at
+    # 40% alpha. Whatever is here stays until the first streamed chunk
+    # replaces it, and stays put beside the st.error if generation fails.
+    with st.container(height=300):
+        output_box = st.empty()
+        if prev_response:
+            output_box.text(prev_response)
+        else:
+            output_box.caption("Translation")  # placeholder-style hint
 
     if text.strip():
         st.caption("&nbsp;")  # spacer matching the left column's token counter
@@ -257,20 +254,18 @@ if translate_clicked:
         st.warning("Please enter text to translate.", icon=":material/warning:")
     else:
         try:
-            # Stream the translation into the output slot as it generates,
-            # in a fixed-height container matching the settled text area.
+            # Stream into the output box as the model generates; the rerun
+            # then re-renders it settled and enables Download.
             chunks: list[str] = []
-            with output_slot.container(height=300):
-                stream_box = st.empty()
-                for chunk in translate_stream(
-                    text,
-                    source,
-                    ALL_LANGUAGES[source],
-                    target,
-                    ALL_LANGUAGES[target],
-                ):
-                    chunks.append(chunk)
-                    stream_box.text("".join(chunks))
+            for chunk in translate_stream(
+                text,
+                source,
+                ALL_LANGUAGES[source],
+                target,
+                ALL_LANGUAGES[target],
+            ):
+                chunks.append(chunk)
+                output_box.text("".join(chunks))
             st.session_state["translation_result"] = _strip_eos_token("".join(chunks))
             st.rerun()
         except Exception as e:

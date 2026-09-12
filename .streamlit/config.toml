@@ -16,7 +16,7 @@ showWidgetBorder = true      # text areas and selectboxes are border-defined, li
 primaryColor = "#0066CC"             # apple.com link blue; white label 5.57:1
 backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#F5F5F7" # Apple light gray: the text-field wells
-textColor = "#000000"                # pure label: the disabled output is this at 40% alpha (2.82:1; the config ceiling is ~2.86)
+textColor = "#000000"                # pure label; the st.text output ink on the page, 21:1
 borderColor = "#86868B"              # apple.com gray; >= 3:1 on both page and well
 redColor = "#D70015"                 # HIG increase-contrast red; #FF3B30 fails 4.5:1 once the text is derived
 redTextColor = "#6E000B"             # darker than derived #8A000E: widens the red/yellow gap under deuteranopia
@@ -27,7 +27,7 @@ yellowTextColor = "#7A5E00"          # pinned at the derived value so a derivati
 primaryColor = "#0071E3"             # apple.com button blue; white label 4.70:1 (Apple's systemBlue #0A84FF only reaches 3.65)
 backgroundColor = "#1C1C1E"          # systemGray6: the window
 secondaryBackgroundColor = "#141416" # wells darker than the window, like a dark-mode NSTextField
-textColor = "#FFFFFF"                # pure label: the disabled output is this at 40% alpha (3.83:1; the config ceiling is 3.85)
+textColor = "#FFFFFF"                # pure label; the st.text output ink on the window, 17:1
 borderColor = "#6E6E73"              # apple.com gray; >= 3:1 on both window and well
 redColor = "#FF453A"                 # systemRed
 redTextColor = "#FFA39E"             # lighter than derived #FF8B85: 7:1 on the error tint

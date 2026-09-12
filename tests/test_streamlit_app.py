@@ -16,6 +16,19 @@ def _fake_stream(*segments):
     return [SimpleNamespace(text=s) for s in segments]
 
 
+def _output_box(app_test):
+    # at.columns lists every column block in order: the [10, 1, 10] selector
+    # row is 0-2, the content row is 3-4; the output box is the first child
+    # of the right content column.
+    box = app_test.columns[4].children[0]
+    assert box.type == "flex_container"
+    return box
+
+
+def _box_contents(box):
+    return [(child.type, child.value) for child in box.children.values()]
+
+
 class TestConstants:
     def test_model_id(self, app_module):
         assert app_module.MODEL_ID == "mlx-community/translategemma-4b-it-8bit"
@@ -378,26 +391,30 @@ class TestTokenCounter:
         assert "&nbsp;" in captions
 
 
-class TestOutputPlaceholder:
-    def test_output_slot_uses_st_empty_placeholder(self, app_module):
-        # The output slot in the right column is an st.empty() placeholder
-        # so the streaming handler can swap content in without re-rendering
-        # surrounding elements.
+class TestOutputBox:
+    def test_output_box_is_a_fixed_height_container(self, app_module):
+        # The translation lives in one bordered, fixed-height container in
+        # every state; height=300 matches the source text_area.
+        app_module.st.container.assert_called_once_with(height=300)
+
+    def test_st_empty_is_created_inside_the_container(self, app_module):
+        # The single st.empty() must be opened inside the container's
+        # `with` block — st.empty() called before __enter__ or after __exit__
+        # would render the translation outside the bordered box.
+        calls = [str(c) for c in app_module.st.mock_calls]
+        enter = calls.index("call.container().__enter__()")
+        empty = calls.index("call.empty()")
+        leave = next(i for i, c in enumerate(calls) if "container().__exit__" in c)
+        assert enter < empty < leave
         app_module.st.empty.assert_called_once()
 
-    def test_text_area_rendered_into_placeholder(self, app_module):
-        # When not streaming (the default path during import), the disabled
-        # translation text_area is rendered inside the placeholder — not at
-        # the top level. The args match the prior settled-view styling.
-        placeholder = app_module.st.empty.return_value
-        placeholder.text_area.assert_called_once_with(
-            "Translation output",
-            placeholder="Translation",
-            disabled=True,
-            height=300,
-            label_visibility="collapsed",
-            key="text_output",
-        )
+    def test_empty_state_shows_placeholder_caption_not_text(self, app_module):
+        # Nothing has been translated at import time, so the box shows a
+        # muted placeholder and no st.text — and never a disabled text_area.
+        box = app_module.st.empty.return_value
+        box.caption.assert_called_once_with("Translation")
+        box.text.assert_not_called()
+        assert app_module.st.text_area.call_count == 1  # the source only
 
 
 class TestLoadModel:
@@ -434,8 +451,10 @@ class TestStreamingClickPath:
     """End-to-end tests using Streamlit's AppTest harness.
 
     Covers UI branches that import-time MagicMock fixtures can't reach:
-    the streaming click path, the model-load error handler, runtime
-    target-list filtering, and the empty-text warning.
+    the streaming click path and the settled re-render after it, the
+    output box's contents in each state, the model-load error handler,
+    runtime target-list filtering, the swap button, and the empty-text
+    warning.
     """
 
     def test_translate_click_streams_into_session_state(self, app_test, fake_mlx_lm):
@@ -449,6 +468,44 @@ class TestStreamingClickPath:
 
         assert app_test.session_state["translation_result"] == "Hola mundo"
         fake_mlx_lm.stream_generate.assert_called_once()
+
+    def test_settled_translation_renders_as_text_inside_the_box(
+        self, app_test, fake_mlx_lm
+    ):
+        fake_mlx_lm.stream_generate.return_value = _fake_stream("Hola", " ", "mundo")
+        app_test.text_area(key="source_text").input("Hello").run()
+        app_test.button(key="translate_text").click().run()
+
+        # After the post-stream rerun the bordered box holds the result as
+        # st.text — full text colour — not a disabled text_area, and nothing
+        # else renders as st.text anywhere on the page.
+        box = _output_box(app_test)
+        assert _box_contents(box) == [("text", "Hola mundo")]
+        assert [t.value for t in app_test.text] == ["Hola mundo"]
+        assert len(app_test.text_area) == 1  # the source only
+        assert app_test.download_button(key="download_text").disabled is False
+
+    def test_stream_writes_into_the_box_before_the_rerun(self, app_test, fake_mlx_lm):
+        # A generator that yields then raises: the error path skips
+        # st.rerun(), so the mid-stream tree survives for inspection. This
+        # is the only test that sees the streaming write itself.
+        def _yield_then_raise():
+            yield SimpleNamespace(text="Hola")
+            raise RuntimeError("boom")
+
+        fake_mlx_lm.stream_generate.return_value = _yield_then_raise()
+        app_test.text_area(key="source_text").input("Hello").run()
+        app_test.button(key="translate_text").click().run()
+
+        assert _box_contents(_output_box(app_test)) == [("text", "Hola")]
+        assert any("boom" in e.value for e in app_test.error)
+
+    def test_empty_output_box_shows_placeholder_caption(self, app_test):
+        box = _output_box(app_test)
+        assert box.proto.height_config.pixel_height == 300
+        assert _box_contents(box) == [("caption", "Translation")]
+        assert not app_test.text
+        assert app_test.download_button(key="download_text").disabled is True
 
     def test_over_budget_input_disables_translate_button(
         self, app_test, mock_tokenizer

@@ -5,7 +5,7 @@ Deselected by default (`-m "not live"` in `addopts`) because it loads the full
 
 No other test loads the real `mlx_lm` (the ones that touch it swap in a
 `MagicMock`), so the suite cannot see runtime breakage in the MLX stack: an
-`mlx-lm`/`mlx` pairing that returns an empty translation still passes all 86
+`mlx-lm`/`mlx` pairing that returns an empty translation still passes all 91
 other tests at 100% coverage. This is the only test that would notice, which
 makes it worth running by hand after any `mlx` or `mlx-lm` bump. See Known
 Issues in CLAUDE.md for the failure that prompted it.
@@ -48,5 +48,5 @@ def test_real_translation_round_trip() -> None:
     assert result != _SOURCE_TEXT, "output is the untranslated source"
     assert "<end_of_turn>" not in result, "EOS token leaked into the output"
 
-    # The settled text area should mirror what landed in session state.
-    assert at.text_area(key="text_output").value == result
+    # The settled output box should mirror what landed in session state.
+    assert [t.value for t in at.text] == [result]

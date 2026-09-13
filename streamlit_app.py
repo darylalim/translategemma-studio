@@ -310,7 +310,10 @@ with st.container(horizontal_alignment="center"), st.container(width=PAGE_WIDTH)
             # re-renders it settled and enables Download.
             chunks: list[str] = []
             try:
-                output_box.caption("Translating…")  # covers the prefill wait
+                # Covers the prefill wait, animated so it reads as in progress.
+                # Markdown, not caption: a caption's 0.6 opacity stacked on the
+                # shimmer's rest alpha falls below AA in both themes.
+                output_box.markdown(":shimmer[Translating…]")
                 for chunk in translate_stream(
                     text,
                     source,

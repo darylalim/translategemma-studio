@@ -1,10 +1,17 @@
+from __future__ import annotations
+
 import logging
 from collections.abc import Iterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import streamlit as st
 from mlx_lm import generate, load, stream_generate
-from streamlit.delta_generator import DeltaGenerator
+
+if TYPE_CHECKING:
+    # Annotation only. Kept off the runtime path so the import-time tests,
+    # which swap sys.modules["streamlit"] for a MagicMock, never need a real
+    # Streamlit submodule cached.
+    from streamlit.delta_generator import DeltaGenerator
 
 from languages import (
     ALL_LANGUAGES,
@@ -25,17 +32,19 @@ CONTEXT_WINDOW = 2048
 MAX_PROMPT_TOKENS = 1024  # prompt cap; leaves >=1024 tokens for the translation
 MAX_INPUT_CHARS = 5000  # coarse backstop; the token budget is the real gate
 # The page renders inside one centred column of this width (see "Page
-# column" below), so the two panels are 592px each from ~1360 wide up and a
-# line of 16px output holds ~75 characters, the top of the readable range.
-# Measured: 1300 gives 80-81 (text area 91-97); 1100 gives 542px panels at
-# 67 / 76. A narrower window clamps the column to the page.
+# column" below), so the two panels are 592px each from ~1360 wide up: a
+# line holds ~85 characters in the 14px text area and ~73 in the 16px
+# output, the top of the readable range. Measured (text area / output):
+# 1300 gives 91-97 / 80-81; 1100 gives 542px panels at 76 / 67. A narrower
+# window clamps the column to the page.
 PAGE_WIDTH = 1200
 # One height for the text area and the output box, so their bottoms — and
 # the two buttons directly below them — sit level. The offsets below are
 # measured on 1.63.0 and independent of the height: the buttons' bottom is
-# at 282 px + this, the over-budget badge ends 42 px lower, and a
-# "Translation failed" st.error row 74 px lower still. 400 fits every state
-# on a 1440x900 display (error row at 756) and shows ~14 lines of output; a
+# at 282 px + this, the over-budget badge ends 42 px below the buttons, and
+# a "Translation failed" st.error row 74 px below them (the two never
+# coexist: over budget disables Translate). 400 fits every state on a
+# 1440x900 display (error row at 756) and shows ~14 lines of output; a
 # 680 px laptop viewport needs <=320 for every state, <=350 for buttons and
 # badge. Stay at or under 500, the st.container docstring's ceiling for
 # scrolling containers. Re-measure before changing it.

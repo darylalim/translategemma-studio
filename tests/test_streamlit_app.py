@@ -6,11 +6,6 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-# The app's PANEL_HEIGHT, repeated here because the AppTest helpers cannot
-# import streamlit_app (importing it runs the script against the real model);
-# TestConstants.test_panel_height_matches_the_apptest_helper ties the two.
-PANEL_HEIGHT = 400
-
 
 def _caption_texts(app_module):
     return [c.args[0] for c in app_module.st.caption.call_args_list if c.args]
@@ -32,15 +27,16 @@ def _fake_stream(*segments):
 
 
 def _is_output_box(child):
-    return (
-        child.type == "flex_container"
-        and child.proto.height_config.pixel_height == PANEL_HEIGHT
-    )
+    # The output box is the only element inside the columns with a pixel
+    # height; the exact number is pinned in TestOutputBox, not here, so the
+    # AppTest helpers need no copy of PANEL_HEIGHT (importing streamlit_app
+    # here would run the script against the real model).
+    return child.type == "flex_container" and child.proto.height_config.pixel_height > 0
 
 
 def _output_box(app_test):
-    # The one fixed-height (PANEL_HEIGHT) container on the page, found structurally
-    # so this does not repeat conftest's positional column-order knowledge.
+    # The one fixed-height container on the page, found structurally so this
+    # does not repeat conftest's positional column-order knowledge.
     boxes = [
         child
         for column in app_test.columns
@@ -48,7 +44,7 @@ def _output_box(app_test):
         if _is_output_box(child)
     ]
     assert len(boxes) == 1, (
-        f"expected one {PANEL_HEIGHT}px output container, found {len(boxes)}"
+        f"expected one fixed-height output container, found {len(boxes)}"
     )
     return boxes[0]
 
@@ -59,7 +55,7 @@ def _box_contents(box):
 
 def _content_columns(app_test):
     # The two content columns, identified by what they hold — the source
-    # text_area and the PANEL_HEIGHT output box — rather than by position.
+    # text_area and the fixed-height output box — rather than by position.
     def holding(predicate, what):
         columns = [
             column
@@ -72,7 +68,7 @@ def _content_columns(app_test):
         return columns[0]
 
     left = holding(lambda child: child.type == "text_area", "the source text_area")
-    right = holding(_is_output_box, f"the {PANEL_HEIGHT}px output box")
+    right = holding(_is_output_box, "the fixed-height output box")
     return left, right
 
 
@@ -96,10 +92,6 @@ class TestConstants:
 
     def test_max_input_chars(self, app_module):
         assert app_module.MAX_INPUT_CHARS == 5000
-
-    def test_panel_height_matches_the_apptest_helper(self, app_module):
-        # Ties this module's PANEL_HEIGHT literal to the app's constant.
-        assert app_module.PANEL_HEIGHT == PANEL_HEIGHT
 
     def test_panel_height_under_the_scrolling_container_ceiling(self, app_module):
         # st.container's docstring: avoid scrolling heights over 500 pixels.
@@ -479,8 +471,13 @@ class TestButtonLayout:
         # Hard rule: the text area and the output box read the same height,
         # so their bottoms — and the two buttons below them — sit level.
         text_area_height = app_module.st.text_area.call_args.kwargs["height"]
-        box_height = app_module.st.container.call_args_list[-1].kwargs["height"]
-        assert text_area_height == box_height == app_module.PANEL_HEIGHT
+        # Select the box's call by its kwarg rather than by position, so an
+        # st.container added after the box fails this assertion, not a
+        # KeyError.
+        [box_call] = [
+            c for c in app_module.st.container.call_args_list if "height" in c.kwargs
+        ]
+        assert text_area_height == box_call.kwargs["height"] == app_module.PANEL_HEIGHT
 
     def test_no_spacer_caption(self, app_module):
         # The right column once mirrored the counter with an invisible
@@ -637,11 +634,27 @@ class TestStreamingClickPath:
         assert any("boom" in e.value for e in app_test.error)
         assert app_test.download_button(key="download_text").disabled is False
 
-    def test_page_column_is_the_main_blocks_only_child(self, app_test):
+    def test_page_column_is_the_main_blocks_only_child(self, app_test, fake_mlx_lm):
         # Everything renders inside the centred page column; a top-level
         # st.* call outside the with block would appear here as a sibling
-        # and render full-bleed under wide.
-        assert [c.type for c in app_test.main.children.values()] == ["flex_container"]
+        # and render full-bleed under wide. Checked in the two states that
+        # render outside the columns — the empty-text warning and the
+        # failure callout — because those live in the `if translate_clicked:`
+        # tail, the block a dedent at the end of the file would strand.
+        def main_children():
+            return [c.type for c in app_test.main.children.values()]
+
+        assert main_children() == ["flex_container"]  # empty
+
+        app_test.button(key="translate_text").click().run()
+        assert app_test.warning  # precondition: the warning branch ran
+        assert main_children() == ["flex_container"]
+
+        fake_mlx_lm.stream_generate.side_effect = RuntimeError("boom")
+        app_test.text_area(key="source_text").input("Hello").run()
+        app_test.button(key="translate_text").click().run()
+        assert app_test.error  # precondition: the failure branch ran
+        assert main_children() == ["flex_container"]
 
     def test_empty_output_box_shows_placeholder_caption(self, app_test):
         assert _box_contents(_output_box(app_test)) == [("caption", "Translation")]

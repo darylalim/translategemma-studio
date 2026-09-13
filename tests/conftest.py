@@ -62,15 +62,6 @@ def app_module():
         "mlx_lm": mock_mlx_lm,
     }
 
-    # streamlit_app does `from streamlit.delta_generator import DeltaGenerator`.
-    # With sys.modules["streamlit"] swapped for a MagicMock, that resolves
-    # only if the real submodule is already cached in sys.modules — Python
-    # returns a cached submodule without consulting its parent. A full run
-    # got this for free because collecting test_live_model.py imports
-    # streamlit.testing.v1 first; `pytest tests/test_streamlit_app.py` alone
-    # did not, and errored at collection with "'streamlit' is not a package".
-    importlib.import_module("streamlit.delta_generator")
-
     originals = {}
     for mod_name, mock_obj in patches.items():
         originals[mod_name] = sys.modules.get(mod_name)

@@ -5,8 +5,8 @@ Deselected by default (`-m "not live"` in `addopts`) because it loads the full
 
 No other test loads the real `mlx_lm` (the ones that touch it swap in a
 `MagicMock`), so the suite cannot see runtime breakage in the MLX stack: an
-`mlx-lm`/`mlx` pairing that returns an empty translation still passes all 97
-other tests at 100% coverage. This is the only test that would notice, which
+`mlx-lm`/`mlx` pairing that returns an empty translation still passes every
+other test at 100% coverage. This is the only test that would notice, which
 makes it worth running by hand after any `mlx` or `mlx-lm` bump. See Known
 Issues in CLAUDE.md for the failure that prompted it.
 """

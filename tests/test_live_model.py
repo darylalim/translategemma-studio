@@ -31,6 +31,9 @@ def test_real_translation_round_trip() -> None:
     at = AppTest.from_file(_APP_PATH, default_timeout=_LIVE_TIMEOUT)
     at.run()
     assert not at.exception, f"app failed to start: {at.exception}"
+    # A load failure is caught and rendered as st.error before st.stop(), so
+    # without this the text_area lookup below fails with KeyError instead.
+    assert not at.error, f"app reported: {[e.value for e in at.error]}"
 
     at.text_area(key="source_text").set_value(_SOURCE_TEXT).run()
     at.button(key="translate_text").click().run()

@@ -20,17 +20,6 @@ def _top_level_calls(app_module):
     return [c for c in app_module.st.mock_calls if "." not in c[0]]
 
 
-def _run(target):
-    # .run() on an AppTest, or on a widget after .input()/.click()/.select(),
-    # then check the script finished without an uncaught exception. Handled
-    # failures render st.error, which the tests expecting them assert on
-    # separately; without this, a crash after the session-state or tree
-    # assertions a test makes would pass unnoticed.
-    at = target.run()
-    assert not at.exception, [e.value for e in at.exception]
-    return at
-
-
 def _fake_stream(*segments):
     # Stand in for mlx-lm's stream of GenerationResponse objects; only the
     # .text attribute is read by translate_stream().
@@ -626,9 +615,11 @@ class TestStreamingClickPath:
     the streaming click path and the settled re-render after it, the
     output box's contents in each state, the button row's shape in each
     state, the model-load error handler, runtime target-list filtering,
-    the swap button, and the empty-text warning. Every run goes through
-    `_run`, so a crash the script does not catch fails the test even when
-    the assertions that follow would still hold.
+    the swap button, and the empty-text warning. Every `.run()` — the
+    fixture's first and each widget's — asserts the script raised nothing
+    uncaught (`_CheckedAppTest` in conftest overrides `AppTest._run`, the
+    funnel both reach), so a crash the script does not catch fails the test
+    even when the assertions that follow would still hold.
     """
 
     def test_translate_click_streams_into_session_state(self, app_test, fake_mlx_lm):
@@ -637,8 +628,8 @@ class TestStreamingClickPath:
             SimpleNamespace(text=" "),
             SimpleNamespace(text="mundo"),
         ]
-        _run(app_test.text_area(key="source_text").input("Hello"))
-        _run(app_test.button(key="translate_text").click())
+        app_test.text_area(key="source_text").input("Hello").run()
+        app_test.button(key="translate_text").click().run()
 
         assert app_test.session_state["translation_result"] == "Hola mundo"
         fake_mlx_lm.stream_generate.assert_called_once()
@@ -647,8 +638,8 @@ class TestStreamingClickPath:
         self, app_test, fake_mlx_lm
     ):
         fake_mlx_lm.stream_generate.return_value = _fake_stream("Hola", " ", "mundo")
-        _run(app_test.text_area(key="source_text").input("Hello"))
-        _run(app_test.button(key="translate_text").click())
+        app_test.text_area(key="source_text").input("Hello").run()
+        app_test.button(key="translate_text").click().run()
 
         # After the post-stream rerun the bordered box holds the result as
         # st.text — full text colour — not a disabled text_area, and nothing
@@ -668,8 +659,8 @@ class TestStreamingClickPath:
             raise RuntimeError("boom")
 
         fake_mlx_lm.stream_generate.return_value = _yield_then_raise()
-        _run(app_test.text_area(key="source_text").input("Hello"))
-        _run(app_test.button(key="translate_text").click())
+        app_test.text_area(key="source_text").input("Hello").run()
+        app_test.button(key="translate_text").click().run()
 
         assert _box_contents(_output_box(app_test)) == [("text", "Hola")]
         assert any("boom" in e.value for e in app_test.error)
@@ -681,12 +672,12 @@ class TestStreamingClickPath:
         # translation that dies before streaming anything must not leave
         # "Translating…" (or nothing) in the box.
         fake_mlx_lm.stream_generate.return_value = _fake_stream("Hola", " ", "mundo")
-        _run(app_test.text_area(key="source_text").input("Hello"))
-        _run(app_test.button(key="translate_text").click())
+        app_test.text_area(key="source_text").input("Hello").run()
+        app_test.button(key="translate_text").click().run()
         assert _box_contents(_output_box(app_test)) == [("text", "Hola mundo")]
 
         fake_mlx_lm.stream_generate.side_effect = RuntimeError("boom")
-        _run(app_test.button(key="translate_text").click())
+        app_test.button(key="translate_text").click().run()
 
         assert _box_contents(_output_box(app_test)) == [("text", "Hola mundo")]
         assert any("boom" in e.value for e in app_test.error)
@@ -704,13 +695,13 @@ class TestStreamingClickPath:
 
         assert main_children() == ["flex_container"]  # empty
 
-        _run(app_test.button(key="translate_text").click())
+        app_test.button(key="translate_text").click().run()
         assert app_test.warning  # precondition: the warning branch ran
         assert main_children() == ["flex_container"]
 
         fake_mlx_lm.stream_generate.side_effect = RuntimeError("boom")
-        _run(app_test.text_area(key="source_text").input("Hello"))
-        _run(app_test.button(key="translate_text").click())
+        app_test.text_area(key="source_text").input("Hello").run()
+        app_test.button(key="translate_text").click().run()
         assert app_test.error  # precondition: the failure branch ran
         assert main_children() == ["flex_container"]
 
@@ -725,7 +716,7 @@ class TestStreamingClickPath:
         # Force the cached tokenizer to report > MAX_PROMPT_TOKENS (1024).
         mock_tokenizer.encode.return_value = list(range(2000))
         # set_value bypasses max_chars so we can stage any prompt length.
-        _run(app_test.text_area(key="source_text").set_value("text"))
+        app_test.text_area(key="source_text").set_value("text").run()
 
         assert app_test.button(key="translate_text").disabled is True
         # The over-budget indicator renders as a red badge (a markdown
@@ -750,25 +741,25 @@ class TestStreamingClickPath:
         right = ["flex_container", "download_button"]
         assert _column_shapes(app_test) == (left, right)  # empty
 
-        _run(app_test.text_area(key="source_text").input("Hello"))
+        app_test.text_area(key="source_text").input("Hello").run()
         assert _column_shapes(app_test) == (left, right)  # under budget
 
         fake_mlx_lm.stream_generate.return_value = _fake_stream("Hola")
-        _run(app_test.button(key="translate_text").click())
+        app_test.button(key="translate_text").click().run()
         assert app_test.download_button(key="download_text").disabled is False
         assert _column_shapes(app_test) == (left, right)  # with a result
 
         mock_tokenizer.encode.return_value = list(range(2000))
-        _run(app_test.text_area(key="source_text").set_value("text"))
+        app_test.text_area(key="source_text").set_value("text").run()
         assert _column_shapes(app_test) == ([*left, "markdown"], right)  # badge
 
     def test_translation_exception_logs_and_shows_error(
         self, app_test, fake_mlx_lm, caplog
     ):
         fake_mlx_lm.stream_generate.side_effect = RuntimeError("model crashed")
-        _run(app_test.text_area(key="source_text").input("Hello"))
+        app_test.text_area(key="source_text").input("Hello").run()
         with caplog.at_level("ERROR"):
-            _run(app_test.button(key="translate_text").click())
+            app_test.button(key="translate_text").click().run()
 
         assert any("model crashed" in e.value for e in app_test.error)
         assert any(e.icon == ":material/error:" for e in app_test.error)
@@ -779,14 +770,26 @@ class TestStreamingClickPath:
     ):
         fake_mlx_lm.load.side_effect = RuntimeError("model gone")
         with caplog.at_level("ERROR"):
-            _run(app_test_unrun)
+            app_test_unrun.run()
 
         assert any("Failed to load model" in e.value for e in app_test_unrun.error)
         assert any(e.icon == ":material/error:" for e in app_test_unrun.error)
         assert any("Failed to load model" in r.message for r in caplog.records)
-        # The selector row renders above the load, so it survives a failure;
-        # the panels render below it and are never reached.
+        # The failure state pins where the load sits: the page column holds
+        # the title, the completed selector row and then the error at its own
+        # level — a load above the row drops the row, one inside any column
+        # nests the error, one past st.columns(2) adds a second block — and
+        # the whole row rendered first (two selectboxes, the swap button).
+        page_column = next(
+            iter(next(iter(app_test_unrun.main.children.values())).children.values())
+        )
+        assert [c.type for c in page_column.children.values()] == [
+            "title",
+            "flex_container",
+            "error",
+        ]
         assert len(app_test_unrun.selectbox) == 2
+        assert len(app_test_unrun.button) == 1  # the swap button
         assert not app_test_unrun.text_area
 
     def test_model_load_unexpected_shape_logs_and_shows_error(
@@ -796,7 +799,7 @@ class TestStreamingClickPath:
         # anything but (model, tokenizer) rather than unpack it by accident.
         fake_mlx_lm.load.return_value = (MagicMock(), MagicMock(), {})
         with caplog.at_level("ERROR"):
-            _run(app_test_unrun)
+            app_test_unrun.run()
 
         assert any("expected 2" in e.value for e in app_test_unrun.error)
         assert any("Failed to load model" in r.message for r in caplog.records)
@@ -805,7 +808,7 @@ class TestStreamingClickPath:
         # Default state: source=English, target=Spanish.
         # Switching source to a bidirectional non-English language must
         # collapse valid targets to ["English"] and reset target_lang.
-        _run(app_test.selectbox(key="source_lang").select("French"))
+        app_test.selectbox(key="source_lang").select("French").run()
 
         assert app_test.session_state["source_lang"] == "French"
         assert app_test.session_state["target_lang"] == "English"
@@ -813,7 +816,7 @@ class TestStreamingClickPath:
     def test_empty_text_translate_click_shows_warning(self, app_test):
         # Default source_text is empty; clicking Translate should warn,
         # not invoke the model.
-        _run(app_test.button(key="translate_text").click())
+        app_test.button(key="translate_text").click().run()
 
         assert any(
             "Please enter text to translate" in w.value for w in app_test.warning
@@ -824,10 +827,21 @@ class TestStreamingClickPath:
         assert app_test.session_state["source_lang"] == "English"
         assert app_test.session_state["target_lang"] == "Spanish"
         # The swap button renders before the translate button, so it's button[0].
-        _run(app_test.button[0].click())
+        app_test.button[0].click().run()
 
         assert app_test.session_state["source_lang"] == "Spanish"
         assert app_test.session_state["target_lang"] == "English"
+
+
+class TestCheckedAppTest:
+    def test_widget_run_that_raises_fails_the_test(self, crashing_app_test):
+        # The crash check overrides the private AppTest._run, the one method
+        # both at.run() and a widget's .run() reach. If a Streamlit bump
+        # renames it, the override becomes dead code and every AppTest test
+        # silently loses the check — this is the test that notices.
+        crashing_app_test.run()  # the script is clean until the click
+        with pytest.raises(AssertionError, match="boom"):
+            crashing_app_test.button[0].click().run()
 
 
 class TestThemeConfig:
@@ -893,15 +907,26 @@ class TestThemeConfig:
     def test_heading_sizes_are_a_full_decreasing_scale(self):
         # A shorter array pins only the levels it names and leaves the rest
         # at stock, so ["2rem"] alone left h2 at 2.25rem — larger than h1.
-        # Shape only: the values themselves are the theme's business.
-        sizes = self._theme().get("headingFontSizes")
-        assert isinstance(sizes, list) and len(sizes) == 6, (
-            f"headingFontSizes must name all six levels, got {sizes!r}"
-        )
-        rems = [float(s.removesuffix("rem")) for s in sizes]
-        assert rems == sorted(rems, reverse=True) and len(set(rems)) == 6, (
-            f"headingFontSizes must decrease from h1 to h6, got {sizes!r}"
-        )
+        # The key is also registered per mode, so a mode section carrying it
+        # is held to the same shape. Shape only: the values themselves are
+        # the theme's business; rem because the file's other sizes are rem.
+        theme = self._theme()
+        tables = {"[theme]": theme}
+        for mode in ("light", "dark"):
+            if "headingFontSizes" in theme.get(mode, {}):
+                tables[f"[theme.{mode}]"] = theme[mode]
+        assert "headingFontSizes" in theme, "[theme] must pin headingFontSizes"
+        for where, table in tables.items():
+            sizes = table["headingFontSizes"]
+            assert isinstance(sizes, list) and len(sizes) == 6, (
+                f"{where} headingFontSizes must name all six levels, got {sizes!r}"
+            )
+            matches = [re.fullmatch(r"(\d+(?:\.\d+)?)rem", str(v)) for v in sizes]
+            assert all(matches), f"{where} headingFontSizes must be rem, got {sizes!r}"
+            rems = [float(m.group(1)) for m in matches if m]
+            assert rems == sorted(rems, reverse=True) and len(set(rems)) == 6, (
+                f"{where} headingFontSizes must decrease from h1 to h6, got {sizes!r}"
+            )
 
     def test_every_colour_value_is_six_digit_hex(self):
         # The frontend drops a malformed colour with only a console warning

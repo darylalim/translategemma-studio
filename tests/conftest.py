@@ -1,19 +1,29 @@
+from __future__ import annotations
+
 import importlib
 import sys
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from types import ModuleType
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from streamlit.testing.v1 import AppTest
+
+if TYPE_CHECKING:
+    from streamlit.proto.WidgetStates_pb2 import WidgetStates
 
 # Token count that mock tokenizers report from encode(); well under the
 # app's MAX_PROMPT_TOKENS budget so translate() accepts the prompt.
 _MOCK_PROMPT_TOKENS = 50
 
-# Absolute path to streamlit_app.py for AppTest.from_file().
+# Absolute path to streamlit_app.py for the AppTest constructor (from_file is
+# not used here — see _CheckedAppTest).
 _APP_PATH = str(Path(__file__).parent.parent / "streamlit_app.py")
 
 
-def _import_app(source_lang: str = "English"):
+def _import_app(source_lang: str = "English") -> ModuleType:
     """Import streamlit_app against a MagicMock streamlit and mlx_lm.
 
     `source_lang` is what the source selectbox returns. The target selectbox
@@ -26,7 +36,9 @@ def _import_app(source_lang: str = "English"):
 
     cache_resource_kwargs: list[dict] = []
 
-    def _identity_cache(func=None, **kwargs):
+    def _identity_cache(
+        func: Callable[..., Any] | None = None, **kwargs: Any
+    ) -> Callable[..., Any]:
         # A bare @st.cache_resource passes the function; the keyword form
         # @st.cache_resource(show_spinner=...) is called first and decorates
         # with what it returns. Both must leave the function untouched; the
@@ -41,7 +53,7 @@ def _import_app(source_lang: str = "English"):
     col1, col_swap, col2 = MagicMock(), MagicMock(), MagicMock()
     col1.selectbox.return_value = source_lang
 
-    def _target_selectbox(*args, **kwargs):
+    def _target_selectbox(*args: Any, **kwargs: Any) -> str:
         mock_st.target_lang_at_target_selectbox = mock_st.session_state["target_lang"]
         return mock_st.target_lang_at_target_selectbox
 
@@ -61,7 +73,7 @@ def _import_app(source_lang: str = "English"):
         ]
     )
 
-    def _mock_columns(*args, **kwargs):
+    def _mock_columns(*args: Any, **kwargs: Any) -> tuple[MagicMock, ...]:
         try:
             return next(_columns_calls)
         except StopIteration:
@@ -108,13 +120,13 @@ def _import_app(source_lang: str = "English"):
 
 
 @pytest.fixture(scope="session")
-def app_module():
+def app_module() -> ModuleType:
     """Import streamlit_app with all heavy dependencies mocked."""
     return _import_app()
 
 
 @pytest.fixture(scope="session")
-def app_module_non_english_source():
+def app_module_non_english_source() -> ModuleType:
     """The same mocked import with the source selectbox returning French.
 
     Only English is a valid target then, so the runtime filter has to fire;
@@ -124,7 +136,7 @@ def app_module_non_english_source():
 
 
 @pytest.fixture(autouse=True)
-def _clear_streamlit_caches():
+def _clear_streamlit_caches() -> Iterator[None]:
     """Reset st.cache_resource between tests.
 
     Streamlit's resource cache is process-global, so without this every test
@@ -137,7 +149,7 @@ def _clear_streamlit_caches():
 
 
 @pytest.fixture()
-def mock_tokenizer():
+def mock_tokenizer() -> MagicMock:
     """A mock tokenizer whose encode() returns a short, countable token list."""
     tokenizer = MagicMock()
     tokenizer.encode.return_value = list(range(_MOCK_PROMPT_TOKENS))
@@ -145,7 +157,9 @@ def mock_tokenizer():
 
 
 @pytest.fixture()
-def patched_translate(app_module, mock_tokenizer):
+def patched_translate(
+    app_module: ModuleType, mock_tokenizer: MagicMock
+) -> Iterator[dict[str, Any]]:
     """Patch load_model + generate + stream_generate for translation tests.
 
     Returns a dict with the bound translate/translate_stream callables plus
@@ -177,26 +191,51 @@ def patched_translate(app_module, mock_tokenizer):
 
 
 @pytest.fixture()
-def fake_mlx_lm(mock_tokenizer):
+def fake_mlx_lm(mock_tokenizer: MagicMock) -> MagicMock:
     """A mlx_lm module mock with load() wired up; per-test customizable."""
     fake = MagicMock()
     fake.load.return_value = (MagicMock(), mock_tokenizer)
     return fake
 
 
-def _build_app_test(fake_mlx_lm):
-    """Common setup for app_test variants: patch sys.modules and build AppTest."""
-    from streamlit.testing.v1 import AppTest
+class _CheckedAppTest(AppTest):
+    """An AppTest whose every run asserts the script raised nothing uncaught.
 
+    Both `at.run()` and a widget's `.run()` (`at.button(...).click().run()`,
+    via Element.run -> ElementTree.run) end in `AppTest._run`, so the check
+    lives there and is structural — not a helper each test has to remember.
+    `AppTest.run` itself is skipped by widget runs, so overriding it would
+    miss them. `_run` is private harness API; `TestCheckedAppTest` proves a
+    widget-run crash is still caught, so a rename fails loudly instead of
+    silently dropping the check. Handled failures render st.error, which the
+    tests that expect them assert on separately. Built through AppTest's own
+    constructor because `from_file` hardcodes `AppTest(...)`; with an
+    absolute path `from_file` only adds an eager `is_file()` check before it.
+    """
+
+    def _run(
+        self, widget_state: WidgetStates | None = None, timeout: float | None = None
+    ) -> AppTest:
+        result = super()._run(widget_state, timeout)
+        assert not result.exception, [e.value for e in result.exception]
+        return result
+
+
+def _build_app_test(
+    fake_mlx_lm: MagicMock,
+) -> tuple[AppTest, ModuleType | None, ModuleType | None]:
+    """Common setup for app_test variants: patch sys.modules and build AppTest."""
     saved_mlx = sys.modules.get("mlx_lm")
     sys.modules["mlx_lm"] = fake_mlx_lm
     # Evict any cached streamlit_app so it re-imports against the mock.
     saved_app = sys.modules.pop("streamlit_app", None)
-    at = AppTest.from_file(_APP_PATH, default_timeout=10)
+    at = _CheckedAppTest(_APP_PATH, default_timeout=10)
     return at, saved_mlx, saved_app
 
 
-def _restore_modules(saved_mlx, saved_app):
+def _restore_modules(
+    saved_mlx: ModuleType | None, saved_app: ModuleType | None
+) -> None:
     if saved_mlx is None:
         sys.modules.pop("mlx_lm", None)
     else:
@@ -208,7 +247,7 @@ def _restore_modules(saved_mlx, saved_app):
 
 
 @pytest.fixture()
-def app_test(fake_mlx_lm):
+def app_test(fake_mlx_lm: MagicMock) -> Iterator[AppTest]:
     """AppTest pre-run to its settled initial state.
 
     Use this for tests that interact with the UI after a normal cold start
@@ -219,17 +258,31 @@ def app_test(fake_mlx_lm):
     at, saved_mlx, saved_app = _build_app_test(fake_mlx_lm)
     try:
         at.run()
-        assert not at.exception, [e.value for e in at.exception]
         yield at
     finally:
         _restore_modules(saved_mlx, saved_app)
 
 
 @pytest.fixture()
-def app_test_unrun(fake_mlx_lm):
+def app_test_unrun(fake_mlx_lm: MagicMock) -> Iterator[AppTest]:
     """AppTest that has NOT yet been run; caller controls the first .run()."""
     at, saved_mlx, saved_app = _build_app_test(fake_mlx_lm)
     try:
         yield at
     finally:
         _restore_modules(saved_mlx, saved_app)
+
+
+@pytest.fixture()
+def crashing_app_test(tmp_path: Path) -> AppTest:
+    """A _CheckedAppTest over a script that raises only when its button is clicked.
+
+    Not the app: this exists to prove the crash check reaches widget runs.
+    """
+    script = tmp_path / "crash_on_click.py"
+    script.write_text(
+        "import streamlit as st\n"
+        'if st.button("Boom"):\n'
+        '    raise RuntimeError("boom")\n'
+    )
+    return _CheckedAppTest(str(script), default_timeout=10)

@@ -17,7 +17,19 @@ _APP_PATH = str(Path(__file__).parent.parent / "streamlit_app.py")
 def app_module():
     """Import streamlit_app with all heavy dependencies mocked."""
     mock_st = MagicMock()
-    mock_st.cache_resource = lambda f: f
+
+    cache_resource_kwargs: list[dict] = []
+
+    def _identity_cache(func=None, **kwargs):
+        # A bare @st.cache_resource passes the function; the keyword form
+        # @st.cache_resource(show_spinner=...) is called first and decorates
+        # with what it returns. Both must leave the function untouched; the
+        # kwargs are kept so TestLoadModel can pin the spinner message.
+        cache_resource_kwargs.append(kwargs)
+        return func if func is not None else (lambda f: f)
+
+    mock_st.cache_resource = _identity_cache
+    mock_st.cache_resource_kwargs = cache_resource_kwargs
     mock_st.session_state = {}
 
     col1, col_swap, col2 = MagicMock(), MagicMock(), MagicMock()
@@ -69,13 +81,17 @@ def app_module():
 
     if "streamlit_app" in sys.modules:
         del sys.modules["streamlit_app"]
-    module = importlib.import_module("streamlit_app")
-
-    for mod_name, orig in originals.items():
-        if orig is None:
-            sys.modules.pop(mod_name, None)
-        else:
-            sys.modules[mod_name] = orig
+    try:
+        module = importlib.import_module("streamlit_app")
+    finally:
+        # Always put the real modules back: if the import raises, a leaked
+        # MagicMock streamlit would make every AppTest and theme test error
+        # in _clear_streamlit_caches, burying the one failure that matters.
+        for mod_name, orig in originals.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
 
     return module
 
@@ -176,6 +192,7 @@ def app_test(fake_mlx_lm):
     at, saved_mlx, saved_app = _build_app_test(fake_mlx_lm)
     try:
         at.run()
+        assert not at.exception, [e.value for e in at.exception]
         yield at
     finally:
         _restore_modules(saved_mlx, saved_app)

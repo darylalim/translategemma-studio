@@ -37,10 +37,10 @@ def test_real_translation_round_trip() -> None:
     assert not at.exception, f"translation raised: {at.exception}"
     # translate_stream() failures are caught and rendered as st.error, so the
     # unhandled-exception check above sails past them -- check the callout too,
-    # otherwise the real cause is lost behind a KeyError below.
+    # otherwise the real cause is misreported by the empty-translation assert
+    # below as the wired_limit() failure.
     assert not at.error, f"app reported: {[e.value for e in at.error]}"
 
-    assert "translation_result" in at.session_state, "no translation produced"
     result = at.session_state["translation_result"]
     # An empty result is the signature of the wired_limit() thread failure:
     # the app loads and the click succeeds, but nothing is generated.

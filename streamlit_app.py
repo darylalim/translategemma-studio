@@ -69,7 +69,10 @@ def build_prompt(
     return f"<start_of_turn>user\n{instruction}<end_of_turn>\n<start_of_turn>model\n"
 
 
-@st.cache_resource
+# The cache's own cache-miss spinner is the one loading indicator. Wrapping the
+# call in st.spinner as well stacks a second spinner ("Running `load_model()`.")
+# under it on a cold load.
+@st.cache_resource(show_spinner="Loading model...")
 def load_model() -> tuple[Any, Any]:
     # mlx_lm.load() is annotated as a 2-tuple | 3-tuple union (return_config=True
     # yields the 3-tuple); the length check narrows it without a suppression.
@@ -153,8 +156,9 @@ def _swap_languages() -> None:
         state["target_lang"],
         state["source_lang"],
     )
-    if "translation_result" in state:
-        state["source_text"] = state.pop("translation_result")
+    if state.get("translation_result"):
+        state["source_text"] = state["translation_result"]
+        state["translation_result"] = ""
 
 
 def _show_settled(box: DeltaGenerator, result: str) -> None:
@@ -183,15 +187,7 @@ with st.container(horizontal_alignment="center"), st.container(width=PAGE_WIDTH)
     # --- Session state defaults ---
     st.session_state.setdefault("source_lang", "English")
     st.session_state.setdefault("target_lang", "Spanish")
-
-    # --- Model loading ---
-    try:
-        with st.spinner("Loading model..."):
-            _, tokenizer = load_model()
-    except Exception as e:
-        logger.exception("Failed to load model")
-        st.error(f"Failed to load model: {e}", icon=":material/error:")
-        st.stop()
+    st.session_state.setdefault("translation_result", "")
 
     # --- Language selectors ---
     col1, col_swap, col2 = st.columns([10, 1, 10], vertical_alignment="center")
@@ -224,6 +220,18 @@ with st.container(horizontal_alignment="center"), st.container(width=PAGE_WIDTH)
             disabled=not can_swap,
         )
 
+    # --- Model loading ---
+    # Below the selector row so a cold start paints the selectors before the
+    # spinner, and above the columns because the spinner renders in the
+    # current container — inside left_col it would sit between the text area
+    # and Translate. Only the token count below depends on the tokenizer.
+    try:
+        _, tokenizer = load_model()
+    except Exception as e:
+        logger.exception("Failed to load model")
+        st.error(f"Failed to load model: {e}", icon=":material/error:")
+        st.stop()
+
     # --- Text areas and buttons ---
     left_col, right_col = st.columns(2)
 
@@ -242,7 +250,7 @@ with st.container(horizontal_alignment="center"), st.container(width=PAGE_WIDTH)
         # Translate, and nothing renders under budget.
         prompt_tokens = 0
         if text.strip():
-            # `tokenizer` is already bound from the module-level load above.
+            # `tokenizer` was bound by the model load above the columns.
             preview = build_prompt(
                 text,
                 source,
@@ -271,7 +279,7 @@ with st.container(horizontal_alignment="center"), st.container(width=PAGE_WIDTH)
                 color="red",
             )
 
-    prev_response = st.session_state.get("translation_result", "")
+    prev_response = st.session_state["translation_result"]
 
     with right_col:
         # One bordered, fixed-height box holds the translation in every state.
@@ -286,7 +294,7 @@ with st.container(horizontal_alignment="center"), st.container(width=PAGE_WIDTH)
         st.download_button(
             label="Download",
             type="secondary",
-            data=prev_response if prev_response else "",
+            data=prev_response,
             file_name="translation.txt",
             mime="text/plain",
             key="download_text",

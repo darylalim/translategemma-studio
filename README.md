@@ -31,7 +31,7 @@ Quality varies. 55 of the 295 have published WMT24++ benchmark scores in the tec
 
 ## Model
 
-Runs the 8-bit MLX quant [`mlx-community/translategemma-4b-it-8bit`](https://huggingface.co/mlx-community/translategemma-4b-it-8bit) (~4B parameters). On first launch it downloads 3.9 GB from the Hugging Face Hub into `~/.cache/huggingface/hub`; later runs load from that cache. Nothing renders until the download finishes, so a cold first start looks like a hang. All inference is local.
+Runs the 8-bit MLX quant [`mlx-community/translategemma-4b-it-8bit`](https://huggingface.co/mlx-community/translategemma-4b-it-8bit) (~4B parameters). On first launch it downloads 3.9 GB from the Hugging Face Hub into `~/.cache/huggingface/hub`; later runs load from that cache. The title and language selectors render, then a "Loading model..." spinner sits below them until the download finishes; the text panels appear only after it. All inference is local.
 
 ## Requirements
 

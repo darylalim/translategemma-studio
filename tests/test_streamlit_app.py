@@ -270,6 +270,22 @@ class TestSwapDisabled:
         assert mock_state == {"source_lang": "French", "target_lang": "English"}
 
 
+class TestTargetFilter:
+    def test_target_filter_runs_before_the_target_selectbox(
+        self, app_module_non_english_source
+    ):
+        # With a non-English source the only valid target is English, so the
+        # runtime filter must have rewritten session_state["target_lang"]
+        # before the target selectbox was created. Below the widget it is
+        # dead code, not a crash: a real selectbox silently resets a stored
+        # value outside its options and writes it back, so the filter's
+        # condition is never true and every AppTest stays green (see
+        # CLAUDE.md → Do not touch). The mock selectbox does not repair,
+        # which is what lets this layer see the order.
+        st = app_module_non_english_source.st
+        assert st.target_lang_at_target_selectbox == "English"
+
+
 class TestCountPromptTokens:
     def test_counts_encoded_tokens(self, app_module, mock_tokenizer):
         count = app_module.count_prompt_tokens("a prompt", mock_tokenizer)

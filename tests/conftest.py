@@ -13,9 +13,15 @@ _MOCK_PROMPT_TOKENS = 50
 _APP_PATH = str(Path(__file__).parent.parent / "streamlit_app.py")
 
 
-@pytest.fixture(scope="session")
-def app_module():
-    """Import streamlit_app with all heavy dependencies mocked."""
+def _import_app(source_lang: str = "English"):
+    """Import streamlit_app against a MagicMock streamlit and mlx_lm.
+
+    `source_lang` is what the source selectbox returns. The target selectbox
+    returns whatever session_state["target_lang"] holds when it is created and
+    records that value on `st.target_lang_at_target_selectbox`, so a test can
+    check the runtime target filter ran first — a real selectbox silently
+    resets a stored value outside its options, so AppTest cannot see this.
+    """
     mock_st = MagicMock()
 
     cache_resource_kwargs: list[dict] = []
@@ -33,8 +39,13 @@ def app_module():
     mock_st.session_state = {}
 
     col1, col_swap, col2 = MagicMock(), MagicMock(), MagicMock()
-    col1.selectbox.return_value = "English"
-    col2.selectbox.return_value = "Spanish"
+    col1.selectbox.return_value = source_lang
+
+    def _target_selectbox(*args, **kwargs):
+        mock_st.target_lang_at_target_selectbox = mock_st.session_state["target_lang"]
+        return mock_st.target_lang_at_target_selectbox
+
+    col2.selectbox.side_effect = _target_selectbox
 
     # Content columns
     left_col, right_col = MagicMock(), MagicMock()
@@ -94,6 +105,22 @@ def app_module():
                 sys.modules[mod_name] = orig
 
     return module
+
+
+@pytest.fixture(scope="session")
+def app_module():
+    """Import streamlit_app with all heavy dependencies mocked."""
+    return _import_app()
+
+
+@pytest.fixture(scope="session")
+def app_module_non_english_source():
+    """The same mocked import with the source selectbox returning French.
+
+    Only English is a valid target then, so the runtime filter has to fire;
+    the default import never exercises it.
+    """
+    return _import_app(source_lang="French")
 
 
 @pytest.fixture(autouse=True)

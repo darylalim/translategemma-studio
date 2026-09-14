@@ -90,8 +90,13 @@ class TestConstants:
     def test_max_prompt_tokens(self, app_module):
         assert app_module.MAX_PROMPT_TOKENS == 1024
 
-    def test_max_input_chars(self, app_module):
-        assert app_module.MAX_INPUT_CHARS == 5000
+    def test_text_area_has_no_character_cap(self, app_module):
+        # The token budget is the one limit. A max_chars cap froze the text
+        # area whenever a swapped translation exceeded it (the frontend drops
+        # any edit whose result is still over the cap, deletions included).
+        # max_chars is also st.text_area's fourth positional parameter.
+        assert app_module.st.text_area.call_args.args == ("Source text",)
+        assert "max_chars" not in app_module.st.text_area.call_args.kwargs
 
     def test_panel_height_under_the_scrolling_container_ceiling(self, app_module):
         # st.container's docstring: avoid scrolling heights over 500 pixels.
@@ -715,7 +720,6 @@ class TestStreamingClickPath:
     ):
         # Force the cached tokenizer to report > MAX_PROMPT_TOKENS (1024).
         mock_tokenizer.encode.return_value = list(range(2000))
-        # set_value bypasses max_chars so we can stage any prompt length.
         app_test.text_area(key="source_text").set_value("text").run()
 
         assert app_test.button(key="translate_text").disabled is True

@@ -30,7 +30,11 @@ MODEL_ID = "mlx-community/translategemma-4b-it-8bit"
 # the quant's max_position_embeddings (131072) allows far more.
 CONTEXT_WINDOW = 2048
 MAX_PROMPT_TOKENS = 1024  # prompt cap; leaves >=1024 tokens for the translation
-MAX_INPUT_CHARS = 5000  # coarse backstop; the token budget is the real gate
+# There is deliberately no character cap on the text area: the token budget is
+# the one limit (see "Token usage" below), and st.text_area's max_chars froze
+# the area whenever a swapped translation exceeded it — the frontend drops any
+# edit whose result is still over the cap, deletions included. The per-rerun
+# encode() it guarded costs ~3 ms per 5,000 characters.
 # The page renders inside one centred column of this width (see "Page
 # column" below), so the two panels are 592px each from ~1360 wide up: a
 # line holds ~85 characters in the 14px text area and ~73 in the 16px
@@ -239,7 +243,6 @@ with st.container(horizontal_alignment="center"), st.container(width=PAGE_WIDTH)
         text = st.text_area(
             "Source text",
             height=PANEL_HEIGHT,
-            max_chars=MAX_INPUT_CHARS,
             key="source_text",
             label_visibility="collapsed",
         )
